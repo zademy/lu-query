@@ -1,0 +1,3 @@
+# Un chokepoint de acceso a datos, testeado desde el protocolo MCP
+
+Toda sentencia pasa por la interfaz `DataAccess` (`src/db/data-access.ts`): es el único lugar con auditoría, timeout y commit explícito. Los tests unitarios no mockean módulos: inyectan un `FakeDataAccess` programable en el server MCP real montado sobre `InMemoryTransport`, de modo que el contrato probado (tools/list, recursos, `isError`) es exactamente el que ve el cliente. Elegimos esta seam única porque la paridad exigida es de contrato MCP, no de internals; probar por capas duplicaría el contrato en dos sitios que pueden divergir.

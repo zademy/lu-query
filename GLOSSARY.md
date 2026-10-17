@@ -1,0 +1,41 @@
+# lu-query
+
+Servidor MCP que expone una base de datos Oracle como tools a clientes MCP, con paridad 1:1 con el servidor Java `mcp-oracle-db`. Este glosario fija el vocabulario del proyecto.
+
+## Lenguaje
+
+**Tool**:
+Operación MCP expuesta al cliente (run_query, describe_table, …) sobre la base Oracle.
+_Avoid_: comando, endpoint, función
+
+**Paridad**:
+Equivalencia conductual 1:1 con `mcp-oracle-db` (Java): el contrato de cada tool se decide contra su firma Java original.
+_Avoid_: compatibilidad, fidelidad
+
+**Chokepoint**:
+El único paso por el que atraviesan todas las sentencias SQL del server; ahí se aplican auditoría, timeouts y commit.
+_Avoid_: repositorio, DAO, capa de datos
+
+**Archivo de auditoría de sesión**:
+Registro Markdown, uno por sesión del server, con una entrada por ejecución de tool (kind, type, duración, filas, SQL verbatim).
+_Avoid_: log JSON, audit log a secas
+
+**Kind**:
+Familia sintáctica de una sentencia SQL (SELECT, INSERT, CREATE, BEGIN…): el primer token en mayúsculas.
+_Avoid_: tipo de sentencia (se confunde con Type)
+
+**Type**:
+Efecto de una sentencia sobre los datos (READ, WRITE u OTHER); se deriva del kind.
+_Avoid_: modo, categoría
+
+**Capped select**:
+SELECT de lectura envuelto en paginación (OFFSET/FETCH) que limita las filas que devuelve el server.
+_Avoid_: paginación manual, límite de filas
+
+**Barrera de mínimos privilegios**:
+Segunda línea de defensa de las tools de lectura: rechazan sentencias que no son SELECT aunque el usuario de BD tuviera permisos para más.
+_Avoid_: validación SQL, filtro SQL
+
+**Schema de sesión**:
+El schema vigente de la sesión Oracle (CURRENT_SCHEMA) cuando ni la tool ni la configuración especifican uno.
+_Avoid_: schema por defecto, schema del usuario
