@@ -21,12 +21,15 @@ const MAX_SUGGESTIONS = 20;
 export function registerAuditResource(ctx: ServerContext): void {
   const { audit } = ctx.config;
   configureAudit(audit);
+  // Con la auditoría apagada el recurso es inerte, como en el Java.
+  const sessionIds = async (): Promise<string[]> =>
+    audit.enabled ? listAuditSessions(audit.dir) : [];
 
   ctx.server.registerResource(
     'audit-session',
     new ResourceTemplate(AUDIT_URI, {
       list: async () => ({
-        resources: (await listAuditSessions(audit.dir)).map((id) => ({
+        resources: (await sessionIds()).map((id) => ({
           uri: `oracle://audit/session/${id}`,
           name: `Sesión de auditoría ${id}`,
           mimeType: MIME,
@@ -35,7 +38,7 @@ export function registerAuditResource(ctx: ServerContext): void {
       complete: {
         id: async (value) => {
           const prefix = value.toUpperCase();
-          return ['current', ...(await listAuditSessions(audit.dir))]
+          return ['current', ...(await sessionIds())]
             .filter((candidate) => candidate.toUpperCase().startsWith(prefix))
             .slice(0, MAX_SUGGESTIONS);
         },
@@ -50,7 +53,6 @@ export function registerAuditResource(ctx: ServerContext): void {
     async (uri, variables) => {
       const requested = String(variables.id);
       const sessionId = requested.toLowerCase() === 'current' ? currentAuditSessionId() : requested;
-      // Con la auditoría apagada el recurso es inerte, como en el Java.
       const markdown = audit.enabled ? await readAuditSession(audit.dir, sessionId) : undefined;
 
       return {
