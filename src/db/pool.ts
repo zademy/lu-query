@@ -64,6 +64,7 @@ export function createPoolProvider(config: ResolvedConfig): PoolProvider {
             poolIncrement: 1,
             connectTimeout: TIMEOUTS.socketSeconds,
             poolAlias: POOL_ALIAS,
+            fetchAsString: [oracledb.CLOB],
             sessionCallback: sessionCallback(initSql),
           }),
         )
@@ -162,6 +163,27 @@ export function createOracleDataAccess(provider: PoolProvider): DataAccess {
       ),
     );
 
+  /**
+   * Igual que `execute` pero con commit explícito: en thin (`oracledb@26`)
+   * `autoCommit` no surte efecto y el DML se pierde al cerrar la conexión.
+   */
+  const executeAndCommit = (
+    sql: string,
+    binds: OracleBind[] | undefined,
+    options: QueryOptions | undefined,
+  ): Promise<OracleResult> =>
+    withConnection(provider, (connection, outFormat) =>
+      withStatementTimeout(connection, options?.timeoutMs ?? TIMEOUTS.statementMs, async () => {
+        const result = await connection
+          .execute(sql, binds ?? [], { outFormat, maxRows: options?.maxRows })
+          .catch((error: unknown) => {
+            throw asDataAccessError(error, 'Oracle rechazó la sentencia');
+          });
+        await connection.commit();
+        return result;
+      }),
+    );
+
   // El hook de auditoría envuelve todo el chokepoint: una entrada por sentencia.
   return withAudit({
     async queryForList(sql, binds, options) {
@@ -171,7 +193,7 @@ export function createOracleDataAccess(provider: PoolProvider): DataAccess {
       return (await execute(sql, binds, options)).rows[0] ?? null;
     },
     async execute(sql, binds, options) {
-      return (await execute(sql, binds, options)).rowsAffected ?? 0;
+      return (await executeAndCommit(sql, binds, options)).rowsAffected ?? 0;
     },
     async call(callString, binds) {
       return (await execute(`BEGIN ${callString}; END;`, binds, undefined)).rows;
