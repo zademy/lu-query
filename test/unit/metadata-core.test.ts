@@ -174,14 +174,19 @@ describe('describe_table', () => {
   });
 
   it('falla con isError cuando no hay schema explícito ni configurado', async () => {
-    const dataAccess = new FakeDataAccess().always(() => ({ rows: COLUMNS }));
+    // La session no devuelve schema (fila vacia): entonces no hay de donde saca.
+    const dataAccess = new FakeDataAccess()
+      .on(/SYS_CONTEXT/, () => ({ rows: [] }))
+      .always(() => ({ rows: COLUMNS }));
 
     await withHarness({ dataAccess, config: { schema: undefined } }, async (harness) => {
       const result = await call(harness, 'describe_table', { table: 'EMPLOYEES' });
 
       expect(result.isError).toBe(true);
       expect(text(result)).toContain('describe_table necesita un schema');
-      expect(dataAccess.calls).toHaveLength(0);
+      // Solo la consulta del schema de sesion; nunca la del catalogo.
+      expect(dataAccess.calls).toHaveLength(1);
+      expect(dataAccess.calls[0]?.sql).toContain('SYS_CONTEXT');
     });
   });
 

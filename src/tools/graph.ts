@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { withToolContext } from '../audit/context.js';
-import { resolveSchema, schemaFallback } from '../catalog/schema.js';
+import { resolveSchemaFor } from '../catalog/schema.js';
 import type { DataAccess } from '../db/data-access.js';
 import type { OracleBind, OracleRow } from '../db/oracle-types.js';
 import { guardTool } from '../errors.js';
@@ -225,7 +225,7 @@ export function registerGraph(ctx: ServerContext): void {
     async (args) =>
       withToolContext('find_free_id', args, () =>
         guardTool(async () => {
-          const owner = resolveSchema(args.schema, schemaFallback(ctx), 'find_free_id');
+          const owner = await resolveSchemaFor(ctx, args.schema, 'find_free_id');
           const table = assertIdentifier(args.table, 'table');
           const column = assertIdentifier(args.column, 'columna');
           const maxRange = Math.min(args.maxRange ?? 1000, 10_000);
@@ -286,7 +286,7 @@ WHERE NOT EXISTS (SELECT 1 FROM used u WHERE u."${column}" = c.i)`,
     async (args) =>
       withToolContext('find_duplicates', args, () =>
         guardTool(async () => {
-          const owner = resolveSchema(args.schema, schemaFallback(ctx), 'find_duplicates');
+          const owner = await resolveSchemaFor(ctx, args.schema, 'find_duplicates');
           const table = assertIdentifier(args.table, 'table');
           const cols = args.columns.map((column) => quoteIdentifier(column, 'columna'));
           const minCount = args.minCount ?? 2;
@@ -326,7 +326,7 @@ ORDER BY COUNT(*) DESC`,
     async (args) =>
       withToolContext('count_rows', args, () =>
         guardTool(async () => {
-          const owner = resolveSchema(args.schema, schemaFallback(ctx), 'count_rows');
+          const owner = await resolveSchemaFor(ctx, args.schema, 'count_rows');
           const table = assertIdentifier(args.table, 'table');
           const row = await ctx.dataAccess.queryForObject(
             `SELECT COUNT(*) AS cnt FROM ${qualifiedName(owner, table)}`,
@@ -365,7 +365,7 @@ ORDER BY COUNT(*) DESC`,
         guardTool(async () => {
           const graph = await dependencyGraph(
             ctx.dataAccess,
-            resolveSchema(args.schema, schemaFallback(ctx), 'get_dependency_graph'),
+            await resolveSchemaFor(ctx, args.schema, 'get_dependency_graph'),
             args.name,
             args.type,
           );
@@ -397,7 +397,7 @@ ORDER BY COUNT(*) DESC`,
         guardTool(async () => {
           const graph = await fkGraph(
             ctx.dataAccess,
-            resolveSchema(args.schema, schemaFallback(ctx), 'get_fk_graph'),
+            await resolveSchemaFor(ctx, args.schema, 'get_fk_graph'),
             args.table,
           );
           return { content: [{ type: 'text' as const, text: JSON.stringify(graph) }] };
