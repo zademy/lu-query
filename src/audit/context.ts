@@ -1,46 +1,48 @@
-import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
-/** Una operación auditada; `outcome` pasa a ok/error cuando la tool termina. */
-export interface AuditEntry {
-  sessionId: string;
+/**
+ * Contexto de la tool en curso: el equivalente del MDC del Java (`mcp.tool` y
+ * `mcp.params`). Vive en `AsyncLocalStorage` para que el chokepoint DataAccess
+ * lo lea sin que las tools tengan que pasarlo a mano.
+ */
+export interface ToolAuditContext {
   tool: string;
-  startedAt: string;
-  durationMs: number;
-  arguments: Record<string, unknown>;
-  outcome: 'pending' | 'ok' | 'error';
-  detail: string;
+  /** Parámetros ya formateados `name=value, name2=value2`. */
+  params: string;
 }
 
-/** Id de sesión de auditoría (un .md por sesión, como en el Java). */
-export function newAuditSessionId(): string {
-  return randomUUID();
+const context = new AsyncLocalStorage<ToolAuditContext>();
+
+function paramValue(value: unknown): string {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value instanceof Date) return value.toISOString();
+  try {
+    // Objetos y arrays (IN-lists, filtros) como JSON legible, nunca [object Object].
+    return JSON.stringify(value) ?? 'null';
+  } catch {
+    return typeof value;
+  }
 }
 
-export function createAuditEntry(
-  sessionId: string,
+/** Formatea los argumentos de una tool como los muestra la auditoría. */
+export function formatAuditParams(args: Record<string, unknown>): string {
+  return Object.entries(args)
+    .map(([name, value]) => `${name}=${paramValue(value)}`)
+    .join(', ');
+}
+
+/** Ejecuta `run` con el contexto de auditoría de la tool visible en DataAccess. */
+export function withToolContext<T>(
   tool: string,
   args: Record<string, unknown>,
-): AuditEntry {
-  return {
-    sessionId,
-    tool,
-    startedAt: new Date().toISOString(),
-    durationMs: 0,
-    arguments: args,
-    outcome: 'pending',
-    detail: '',
-  };
+  run: () => Promise<T>,
+): Promise<T> {
+  return context.run({ tool, params: formatAuditParams(args) }, run);
 }
 
-export function completeAuditEntry(
-  entry: AuditEntry,
-  outcome: 'ok' | 'error',
-  detail: string,
-): AuditEntry {
-  return {
-    ...entry,
-    outcome,
-    detail,
-    durationMs: Date.now() - Date.parse(entry.startedAt),
-  };
+/** Tool y parámetros de la llamada en curso; `undefined` fuera de una tool. */
+export function currentToolContext(): ToolAuditContext | undefined {
+  return context.getStore();
 }
