@@ -223,13 +223,22 @@ Requires `SELECT ANY DICTIONARY` (or equivalent) on the database user; tools ret
 
 ## Agent skills (optional)
 
-Copyable skill folders teach an agent how to use these 75 tools well - which tool for which job, in what order, what mutates, how failures look, and how to read results:
+Eight task-based skills that teach an agent how to use these 75 tools well - which tool for which job, in what order, what mutates, how failures look, how to read results. Install them with the [`skills`](https://www.npmjs.com/package/skills) CLI, which puts each skill where your agent looks for them:
 
 ```bash
-cp -r node_modules/lu-query/skills/lu-query-* ~/.claude/skills/   # Claude Code / OpenCode
+npx skills@latest add zademy/lu-query           # install the eight skills
+npx skills@latest add zademy/lu-query --list    # just show them
 ```
 
-Eight skills (`lu-query-explore-schema`, `lu-query-query-data`, `lu-query-audit-data-quality`, `lu-query-plan-data-changes`, `lu-query-manage-schema`, `lu-query-use-plsql`, `lu-query-tune-sql`, `lu-query-triage-incident`), each with tool references and examples verified against a real Oracle 26ai database. See [`skills/README.md`](https://github.com/zademy/lu-query/blob/master/skills/README.md). Nothing is installed automatically.
+Useful flags: `-g` install globally instead of per project, `-a <agent>` pick the target (`claude-code`, `opencode`, `cursor`, `codex`, `gemini-cli`, …), `-s <skill>` install one skill (or `'*'` for all), `--copy` copy instead of symlink.
+
+No CLI? Copy them by hand - each folder is self-contained (`SKILL.md` + `references/`):
+
+```bash
+cp -r node_modules/lu-query/skills/lu-query-* ~/.claude/skills/   # Claude Code and OpenCode
+```
+
+Skills: `lu-query-explore-schema`, `lu-query-query-data`, `lu-query-audit-data-quality`, `lu-query-plan-data-changes`, `lu-query-manage-schema`, `lu-query-use-plsql`, `lu-query-tune-sql`, `lu-query-triage-incident`. Catalog and examples provenance: [`skills/README.md`](https://github.com/zademy/lu-query/blob/master/skills/README.md). Installing the server never installs skills on its own.
 
 ## Security
 

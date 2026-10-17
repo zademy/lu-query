@@ -223,13 +223,22 @@ Requiere `SELECT ANY DICTIONARY` (o equivalente) en el usuario de base de datos;
 
 ## Skills para agentes (opcional)
 
-Carpetas de skills copiables que enseñan a un agente cómo usar bien estas 75 tools: qué tool para cada tarea, en qué orden, qué modifica datos, cómo se ven los fallos y cómo leer los resultados:
+Ocho skills por tarea que enseñan a un agente cómo usar bien estas 75 tools: qué tool para cada trabajo, en qué orden, qué modifica datos, cómo se ven los fallos y cómo leer los resultados. Instálalas con el CLI [`skills`](https://www.npmjs.com/package/skills), que coloca cada skill donde tu agente la busca:
 
 ```bash
-cp -r node_modules/lu-query/skills/lu-query-* ~/.claude/skills/   # Claude Code / OpenCode
+npx skills@latest add zademy/lu-query           # instala las ocho skills
+npx skills@latest add zademy/lu-query --list    # solo listarlas
 ```
 
-Ocho skills (`lu-query-explore-schema`, `lu-query-query-data`, `lu-query-audit-data-quality`, `lu-query-plan-data-changes`, `lu-query-manage-schema`, `lu-query-use-plsql`, `lu-query-tune-sql`, `lu-query-triage-incident`), cada una con referencias de sus tools y ejemplos verificados contra una base Oracle 26ai real. Ver [`skills/README.md`](https://github.com/zademy/lu-query/blob/master/skills/README.md). No se instala nada automáticamente.
+Flags útiles: `-g` instala global en vez de por proyecto, `-a <agent>` elige el destino (`claude-code`, `opencode`, `cursor`, `codex`, `gemini-cli`, …), `-s <skill>` instala una sola (o `'*'` para todas), `--copy` copia en vez de enlazar.
+
+¿Sin CLI? Cópialas a mano: cada carpeta es autocontenida (`SKILL.md` + `references/`):
+
+```bash
+cp -r node_modules/lu-query/skills/lu-query-* ~/.claude/skills/   # Claude Code y OpenCode
+```
+
+Skills: `lu-query-explore-schema`, `lu-query-query-data`, `lu-query-audit-data-quality`, `lu-query-plan-data-changes`, `lu-query-manage-schema`, `lu-query-use-plsql`, `lu-query-tune-sql`, `lu-query-triage-incident`. Catálogo y procedencia de los ejemplos: [`skills/README.md`](https://github.com/zademy/lu-query/blob/master/skills/README.md). Instalar el server nunca instala skills por su cuenta.
 
 ## Seguridad
 
