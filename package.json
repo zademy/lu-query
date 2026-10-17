@@ -1,0 +1,47 @@
+{
+  "name": "lu-query",
+  "version": "2.13.0",
+  "description": "MCP server for Oracle DB over stdio (1:1 port of mcp-oracle-db 2.13.0)",
+  "license": "MIT",
+  "author": "Sadot Hdz",
+  "type": "module",
+  "bin": {
+    "lu-query": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsup",
+    "start": "node dist/index.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.0",
+    "@sentry/node": "^10.0.0",
+    "node-sql-parser": "^5.3.8",
+    "oracledb": "^26.0.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "eslint": "^10.13.0",
+    "prettier": "^3.9.10",
+    "tsup": "^9.0.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^5.0.5"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "oracledb@26.0.0": true
+  }
+}

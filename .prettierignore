@@ -1,0 +1,10 @@
+dist/
+coverage/
+node_modules/
+mcp-audit-logs/
+skills-lock.json
+package-lock.json
+# Documentación y skills del repo, fuera del ownership de este paquete.
+.agents/
+docs/
+AGENTS.md
