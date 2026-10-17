@@ -77,3 +77,12 @@ describe('guardTool', () => {
     expect(result.content[0]?.text).toContain('ORA-01031');
   });
 });
+
+  it('corta la request MCP al superar TIMEOUTS.requestMs y devuelve isError', async () => {
+    const colgado = new Promise<never>(() => {});
+
+    const result = await guardTool(() => colgado, 10);
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('timeout de request MCP');
+  });
