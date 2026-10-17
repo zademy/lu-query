@@ -2,6 +2,12 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.1.0/). El número de versión de `package.json` es la fuente de verdad: el workflow de release crea el tag `v<version>` al mergear a master.
 
+## [2.16.1] - 2026-10-17
+
+### Cambios internos
+
+- **Publicacion automatica a npm con trusted publishing (OIDC)**: `.github/workflows/publish.yml` corre al publicar una release y hace `npm publish` sin token ni codigo OTP. Resuelve el error de 2FA en el pipeline: con una cuenta que tiene 2FA, `npm publish` pide un codigo de un solo uso que un runner no puede responder; en su lugar npm verifica la identidad del workflow con un token corto firmado por GitHub (`id-token: write`). Requisitos de npm: Node >= 22.14.0 (CLI >= 11.5.1) y runners alojados por GitHub.
+
 ## [2.16.0] - 2026-10-17
 
 ### Anadido
