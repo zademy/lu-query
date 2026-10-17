@@ -40,7 +40,10 @@ Configuración del cliente (ejemplo para Claude Desktop; sirve cualquier cliente
 
 ### Con OpenCode
 
-OpenCode lee `mcp.servers` de su configuracion (`opencode.json`, o `.opencode/` en el proyecto). Registra lu-query como servidor local:
+**No hay nada que instalar globalmente**: OpenCode lanza el servidor bajo demanda y `npx` lo deja cacheado, igual que `npx lu-query` desde una terminal.
+
+1. Exporta las credenciales de Oracle en el entorno que lanza OpenCode (tu perfil de shell sirve). No hace falta que vivan en el archivo de configuracion.
+2. Registra el servidor en `opencode.json` (global) o en `.opencode/` (por proyecto):
 
 ```json
 {
@@ -62,16 +65,19 @@ OpenCode lee `mcp.servers` de su configuracion (`opencode.json`, o `.opencode/` 
 }
 ```
 
+3. Verificalo: `opencode mcp list` → `✓ lu-query connected`. Los nueve prompts MCP aparecen como `/lu-query:review-sql-performance` y compañía.
+
 Notas:
 
-- `{env:NAME}` es la sintaxis de sustitucion de OpenCode para leer una variable de tu entorno; formas de shell como `$NAME` **no** se expanden dentro de JSON. Deja la contrasena en el entorno, no en el archivo.
-- `timeout.startup` sube a 120 s porque la primera ejecucion de `npx` tiene que descargar el paquete; el default global es 45 s.
+- `{env:NAME}` es la sintaxis de sustitucion de OpenCode para leer una variable del entorno; formas de shell como `$NAME` **no** se expanden dentro de JSON. Deja la contrasena en el entorno, no en el archivo.
+- `timeout.startup` sube a 120 s porque la primera ejecucion de `npx` descarga el paquete; el default global es 45 s.
+- ¿Prefieres instalacion global? `npm i -g lu-query` una vez y luego `"command": ["lu-query"]`: mismo comportamiento, sin descarga en la primera llamada.
 - Sin `ORACLE_DB_SCHEMA`, cada tool usa el schema del usuario conectado; fijala para forzar uno.
-- Verifica la conexion con `opencode mcp list`. El pool es perezoso, asi que un servidor conectado sin base de datos igual responde `initialize`; las credenciales solo se necesitan cuando una tool consulta de verdad.
+- El pool es perezoso: un servidor conectado sin base de datos igual responde `initialize`; las credenciales solo se necesitan cuando una tool consulta de verdad.
 
-### Ejecutar desde un clon local
+### Desde un clon local
 
-Antes de que el paquete exista en npm (o si estas trabajandon en el), apunta el comando a tu build:
+Mientras trabajas en el codigo (o antes de que el paquete exista en npm), apunta el comando a tu build:
 
 ```json
 "lu-query": {

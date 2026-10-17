@@ -40,7 +40,10 @@ Client configuration (Claude Desktop example; any MCP client works):
 
 ### With OpenCode
 
-OpenCode reads `mcp.servers` from its config (`opencode.json`, or `.opencode/` in the project). Register lu-query as a local server:
+There is **nothing to install globally**: OpenCode spawns the server on demand and `npx` keeps it cached, exactly like `npx lu-query` from a terminal.
+
+1. Export the Oracle credentials in the environment that launches OpenCode (your shell profile is fine). They never need to live in the config file.
+2. Register the server in `opencode.json` (global) or in `.opencode/` (per project):
 
 ```json
 {
@@ -62,16 +65,19 @@ OpenCode reads `mcp.servers` from its config (`opencode.json`, or `.opencode/` i
 }
 ```
 
+3. Check it: `opencode mcp list` → `✓ lu-query connected`. The nine MCP prompts show up as `/lu-query:review-sql-performance` and friends.
+
 Notes:
 
-- `{env:NAME}` is OpenCode's substitution syntax for reading a variable from your environment; shell forms like `$NAME` are **not** expanded inside JSON. Keep the password in the environment, not in the file.
-- `timeout.startup` is raised to 120 s because the first run of `npx` has to download the package; the global default is 45 s.
+- `{env:NAME}` is OpenCode's substitution syntax for reading a variable from the environment; shell forms like `$NAME` are **not** expanded inside JSON. Keep the password in the environment, not in the file.
+- `timeout.startup` is raised to 120 s because the first `npx` run downloads the package; the global default is 45 s.
+- Prefer a global install? `npm i -g lu-query` once, then `"command": ["lu-query"]`: same behavior, no download on the first call.
 - Without `ORACLE_DB_SCHEMA`, each tool uses the connected user's schema; set it to pin one.
-- Check the connection with `opencode mcp list`. The pool is lazy, so a connected server with no database still answers `initialize`; the Oracle credentials are only needed when a tool actually queries.
+- The pool is lazy: a connected server with no database still answers `initialize`; the Oracle credentials are only needed when a tool actually queries.
 
-### Running from a local clone
+### From a local clone
 
-Before the package is on npm (or when hacking on it), point the command at your build:
+While hacking on the code (or before the package is on npm), point the command at your build instead:
 
 ```json
 "lu-query": {
