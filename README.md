@@ -6,8 +6,6 @@
 
 ## Watch the promo
 
-[![lu-query promo](docs/banner.png)](https://github.com/zademy/lu-query/raw/master/docs/lu-query-promo.mp4)
-
 **[▶ Watch the 33-second promo (MP4, 1080p30)](https://github.com/zademy/lu-query/raw/master/docs/lu-query-promo.mp4)** - 75 tools, zero-install thin mode and a Markdown audit, in 33 seconds.
 [Download the file](https://github.com/zademy/lu-query/blob/master/docs/lu-query-promo.mp4) | [Remotion source](https://github.com/zademy/lu-query/tree/develop/video)
 
