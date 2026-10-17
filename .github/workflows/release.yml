@@ -1,0 +1,40 @@
+name: release
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Generar notas de release (estilo Spring Boot)
+        run: |
+          node scripts/release-notes.mjs --self-test
+          node scripts/release-notes.mjs > release-notes.md
+          echo "## Preview"
+          head -20 release-notes.md
+
+      - name: Crear release desde la version de package.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v$VERSION"
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::notice::El release $TAG ya existe; sube la version en package.json para publicar uno nuevo."
+            exit 0
+          fi
+          gh release create "$TAG" --title "$TAG" --target "$GITHUB_SHA" --notes-file release-notes.md
