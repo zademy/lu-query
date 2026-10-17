@@ -1,4 +1,4 @@
-![lu-query](https://raw.githubusercontent.com/zademy/lu-query/master/docs/banner.png)
+![lu-query](docs/banner.png)
 
 [![npm](https://img.shields.io/npm/v/lu-query?style=flat-square&label=npm)](https://www.npmjs.com/package/lu-query)
 [![license](https://img.shields.io/npm/l/lu-query?style=flat-square&label=license)](https://github.com/zademy/lu-query/blob/master/LICENSE)
