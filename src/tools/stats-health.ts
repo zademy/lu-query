@@ -48,6 +48,8 @@ export function getColumnStats(
   table: string,
   column: string | undefined,
 ): Promise<OracleRow[]> {
+  // Cada filtro opcional aparece dos veces en el SQL (comparacion y IS NULL), por eso
+  // el mismo valor se bindea dos veces y en ese orden.
   const binds: OracleBind[] = [schema, table, column ?? null, column ?? null];
   return dataAccess.queryForList(COLUMN_STATS_SQL, binds);
 }
@@ -164,6 +166,8 @@ export async function healthReport(ctx: ServerContext): Promise<HealthReport> {
   const { dataAccess, config } = ctx;
   const checks: HealthCheck[] = [];
   let databaseName: string | null = null;
+  // La sonda 1 decide `down`: si no hay conexion, el resto de comprobaciones solo
+  // repetirian el mismo fallo, asi que se saltan y el reporte dice DOWN.
   let down = false;
 
   // 1. Conectividad: una sola sentencia prueba la conexión y trae el nombre.

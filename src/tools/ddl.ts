@@ -177,6 +177,9 @@ interface MviewLogArgs {
 
 /** Ddl — las 7 tools DDL create-style del Java. */
 export function registerDdl(ctx: ServerContext): void {
+  // Patron de las 7 tools: withToolContext abre la entrada de auditoria y
+  // guardTool convierte cualquier excepcion en isError, asi que el handler
+  // nunca propaga errores al transporte.
   ctx.server.registerTool(
     'comment_on_table',
     {

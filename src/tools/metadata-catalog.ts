@@ -15,7 +15,11 @@ import type { ServerContext } from '../server.js';
  * filtran lo dejan en `NULL` para ver todos los schemas visibles.
  */
 
-/** Substring del cliente → patrón LIKE de Oracle (`LikePatterns` del Java). */
+/**
+ * Substring del cliente → patrón LIKE de Oracle (`LikePatterns` del Java).
+ * Si el cliente ya trae `%` o `_` se usa tal cual (sin escaparlos), y se
+ * mayuscula siempre porque el diccionario de Oracle guarda los nombres asi.
+ */
 function likePattern(namePattern: string | undefined): string {
   if (namePattern === undefined || namePattern.trim() === '') return '%';
   if (namePattern.includes('%') || namePattern.includes('_')) return namePattern.toUpperCase();
