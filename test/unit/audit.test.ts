@@ -1,10 +1,21 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { listAuditSessions, readAuditSession } from '../../src/audit/audit-reader.js';
-import { createFileAuditWriter } from '../../src/audit/audit-writer.js';
+import {
+  configureAudit,
+  createFileAuditWriter,
+  currentAuditSessionId,
+} from '../../src/audit/audit-writer.js';
+import { withToolContext } from '../../src/audit/context.js';
+import { loadConfig } from '../../src/config.js';
+import { FakeDataAccess } from '../../src/db/fake-data-access.js';
+import { withAudit, type DataAccess } from '../../src/db/data-access.js';
+import { createServer } from '../../src/server.js';
 import {
   auditFileName,
   renderAuditEntry,
@@ -260,5 +271,194 @@ describe('audit reader', () => {
     expect(await readAuditSession(dir, '../passwd')).toBeUndefined();
     expect(await readAuditSession(dir, 'current')).toBeUndefined();
     expect(await listAuditSessions(dir)).toEqual([]);
+  });
+});
+
+describe('hook de auditoría en el chokepoint DataAccess', () => {
+  function audited(): DataAccess {
+    return withAudit(new FakeDataAccess().always(() => ({ rows: [{ ID: 1 }, { ID: 2 }] })));
+  }
+
+  async function auditFile(): Promise<string> {
+    const [file] = await readdir(dir);
+    return readFile(join(dir, file!), 'utf8');
+  }
+
+  beforeEach(() => {
+    configureAudit({ enabled: true, dir });
+  });
+
+  it('deja una entrada por sentencia con tool, kind, type, filas y SQL verbatim', async () => {
+    const rows = await withToolContext(
+      'run_query',
+      { sql: 'SELECT * FROM emp', offset: null, limit: undefined },
+      () => audited().queryForList('SELECT * FROM emp'),
+    );
+    const markdown = await auditFile();
+
+    expect(rows).toHaveLength(2);
+    expect(markdown).toMatch(/### #1 · \d\d:\d\d:\d\d · run_query · SELECT · READ · ✅ OK/);
+    expect(markdown).toContain('| Filas      | 2 |');
+    expect(markdown).toContain('| Parámetros | sql=SELECT * FROM emp, offset=null, limit=null |');
+    expect(markdown).toContain('```sql\nSELECT * FROM emp\n```');
+    expect(markdown).toMatch(/\| Duración   \| \d+ ms \|/);
+  });
+
+  it('el DML cuenta las filas afectadas y el call deja la sentencia BEGIN', async () => {
+    const dataAccess = withAudit(new FakeDataAccess().always(() => ({ rowCount: 7 })));
+
+    await withToolContext('execute_dml', { sql: 'UPDATE emp SET sal = 1' }, () =>
+      dataAccess.execute('UPDATE emp SET sal = 1'),
+    );
+    await dataAccess.call('mi_proc(1)');
+    const markdown = await auditFile();
+
+    expect(markdown).toContain('execute_dml · UPDATE · WRITE · ✅ OK');
+    expect(markdown).toContain('| Filas      | 7 |');
+    expect(markdown).toContain('(unknown) · BEGIN · OTHER · ✅ OK');
+    expect(markdown).toContain('```sql\nBEGIN mi_proc(1); END;\n```');
+  });
+
+  it('una sentencia fallida deja entrada ❌ con filas -1 y el mensaje, y el error sigue subiendo', async () => {
+    const error = Object.assign(new Error('ORA-01017: invalid username/password; logon denied'), {
+      code: 'ORA-01017',
+    });
+    const dataAccess = withAudit(new FakeDataAccess().alwaysFail(error));
+
+    await expect(
+      withToolContext('test_connection', {}, () => dataAccess.queryForObject('SELECT 1 FROM dual')),
+    ).rejects.toBe(error);
+
+    const markdown = await auditFile();
+    expect(markdown).toMatch(
+      /### #1 · \d\d:\d\d:\d\d · test_connection · SELECT · READ · ❌ ERROR/,
+    );
+    expect(markdown).toContain('| Filas      | -1 |');
+    expect(markdown).toContain('```text\nORA-01017: invalid username/password; logon denied\n```');
+  });
+
+  it('si la auditoría no puede escribir, la respuesta de la tool no se resiente', async () => {
+    const blocker = join(dir, 'bloqueado');
+    await writeFile(blocker, 'soy un archivo');
+    configureAudit({ enabled: true, dir: join(blocker, 'logs') });
+
+    const rows = await withToolContext('run_query', {}, () =>
+      withAudit(new FakeDataAccess().always(() => ({ rows: [{ ID: 1 }] }))).queryForList(
+        'SELECT * FROM emp',
+      ),
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(await readdir(dir)).toEqual(['bloqueado']);
+  });
+
+  it('apagar MCP_AUDIT_ENABLED deja el chokepoint intacto y sin escribir', async () => {
+    configureAudit({ enabled: false, dir });
+
+    await expect(
+      withToolContext('run_query', {}, () => audited().queryForList('SELECT 1 FROM dual')),
+    ).resolves.toHaveLength(2);
+
+    expect(await readdir(dir)).toEqual([]);
+  });
+});
+
+describe('recurso MCP de auditoría', () => {
+  /** El contenido puede ser texto o blob; el recurso de auditoría siempre es texto. */
+  function textOf(contents: readonly unknown[]): string {
+    return String((contents[0] as { text?: string } | undefined)?.text);
+  }
+  /** Server MCP con el fake auditado: sin Oracle, pero con el camino de producción. */
+  async function auditedServer(auditDir: string) {
+    const config = { ...loadConfig({}), audit: { enabled: true, dir: auditDir } };
+    const dataAccess = withAudit(
+      new FakeDataAccess().always(() => ({ rows: [{ VERSION: 'Oracle Database 19c' }] })),
+    );
+    const handle = createServer({ config, dataAccess });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'lu-query-audit-test', version: '0.0.0' });
+    await Promise.all([handle.server.connect(serverTransport), client.connect(clientTransport)]);
+
+    return {
+      client,
+      close: async () => {
+        await client.close();
+        await handle.close();
+      },
+    };
+  }
+
+  it('la tool audita su sentencia y el recurso current sirve ese Markdown', async () => {
+    const oracle = await auditedServer(dir);
+
+    try {
+      await oracle.client.callTool({ name: 'test_connection', arguments: {} });
+
+      const sessionId = currentAuditSessionId();
+      const { contents } = await oracle.client.readResource({
+        uri: `oracle://audit/session/${sessionId}`,
+      });
+      const text = textOf(contents);
+
+      expect(contents[0]?.mimeType).toBe('text/markdown');
+      expect(text).toContain('# Auditoría de lu-query');
+      expect(text).toContain(`| session-id     | ${sessionId} |`);
+      expect(text).toMatch(/### #1 · \d\d:\d\d:\d\d · test_connection · SELECT · READ · ✅ OK/);
+      expect(text).toContain('SYS_CONTEXT');
+      expect(text).toBe(await readAuditSession(dir, sessionId));
+    } finally {
+      await oracle.close();
+    }
+  });
+
+  it('current resuelve la sesión viva, el listado trae ids reales y el completion los ofrece', async () => {
+    const oracle = await auditedServer(dir);
+
+    try {
+      await oracle.client.callTool({ name: 'test_connection', arguments: {} });
+      const sessionId = currentAuditSessionId();
+
+      const current = await oracle.client.readResource({ uri: 'oracle://audit/session/current' });
+      expect(textOf(current.contents)).toContain(`| session-id     | ${sessionId} |`);
+
+      const { resources } = await oracle.client.listResources();
+      expect(resources.map((resource) => resource.uri)).toEqual([
+        `oracle://audit/session/${sessionId}`,
+      ]);
+      const { resourceTemplates } = await oracle.client.listResourceTemplates();
+      expect(resourceTemplates.map((template) => template.uriTemplate)).toEqual([
+        'oracle://audit/session/{id}',
+      ]);
+
+      const completion = await oracle.client.complete({
+        ref: { type: 'ref/resource', uri: 'oracle://audit/session/{id}' },
+        argument: { name: 'id', value: sessionId },
+      });
+      expect(completion.completion.values).toEqual([sessionId]);
+      expect(
+        (
+          await oracle.client.complete({
+            ref: { type: 'ref/resource', uri: 'oracle://audit/session/{id}' },
+            argument: { name: 'id', value: '' },
+          })
+        ).completion.values,
+      ).toEqual(['current', sessionId]);
+    } finally {
+      await oracle.close();
+    }
+  });
+
+  it('una sesión inexistente responde con un mensaje, no con un error de transporte', async () => {
+    const oracle = await auditedServer(dir);
+
+    try {
+      const missing = await oracle.client.readResource({
+        uri: 'oracle://audit/session/20260101T101010.100000000+0000',
+      });
+
+      expect(textOf(missing.contents)).toContain('No hay auditoría para la sesión');
+    } finally {
+      await oracle.close();
+    }
   });
 });

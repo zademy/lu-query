@@ -1,3 +1,4 @@
+import { auditStatement, drainAudit } from '../audit/audit-writer.js';
 import type { OracleBind, OracleRow } from './oracle-types.js';
 
 /** Opciones comunes de una sentencia. */
@@ -35,4 +36,47 @@ export interface DataAccess {
   call(callString: string, binds?: OracleBind[]): Promise<OracleRow[]>;
   /** Libera el pool. Idempotente. */
   close(): Promise<void>;
+}
+
+/**
+ * Envuelve el chokepoint para que cada sentencia SQL deje su entrada en el log
+ * Markdown de la sesión, escrita post-ejecución (éxito o error). Es el
+ * equivalente del `SqlAuditAspect` del Java; el tool en curso llega por
+ * AsyncLocalStorage, no por parámetro.
+ */
+export function withAudit(inner: DataAccess): DataAccess {
+  return {
+    queryForList(sql, binds, options) {
+      return auditStatement(
+        sql,
+        () => inner.queryForList(sql, binds, options),
+        (rows) => rows.length,
+      );
+    },
+    queryForObject(sql, binds, options) {
+      return auditStatement(
+        sql,
+        () => inner.queryForObject(sql, binds, options),
+        (row) => (row === null ? 0 : 1),
+      );
+    },
+    execute(sql, binds, options) {
+      return auditStatement(
+        sql,
+        () => inner.execute(sql, binds, options),
+        (rowsAffected) => rowsAffected,
+      );
+    },
+    call(callString, binds) {
+      return auditStatement(
+        `BEGIN ${callString}; END;`,
+        () => inner.call(callString, binds),
+        (rows) => rows.length,
+      );
+    },
+    async close() {
+      await drainAudit(); // flush de las entradas pendientes antes de soltar el pool
+      await inner.close();
+    },
+  };
 }

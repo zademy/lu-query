@@ -1,7 +1,7 @@
 import { TIMEOUTS, type ResolvedConfig } from '../config.js';
 import { DataAccessError } from '../errors.js';
 import { isValidIdentifier } from '../security/identifiers.js';
-import type { DataAccess, QueryOptions } from './data-access.js';
+import { withAudit, type DataAccess, type QueryOptions } from './data-access.js';
 import {
   loadOracle,
   type OracleBind,
@@ -162,7 +162,8 @@ export function createOracleDataAccess(provider: PoolProvider): DataAccess {
       ),
     );
 
-  return {
+  // El hook de auditoría envuelve todo el chokepoint: una entrada por sentencia.
+  return withAudit({
     async queryForList(sql, binds, options) {
       return (await execute(sql, binds, options)).rows;
     },
@@ -178,5 +179,5 @@ export function createOracleDataAccess(provider: PoolProvider): DataAccess {
     close() {
       return provider.close();
     },
-  };
+  });
 }

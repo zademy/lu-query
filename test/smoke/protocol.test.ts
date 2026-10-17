@@ -24,12 +24,14 @@ describe('protocolo MCP sobre stdio simulado', () => {
     }
   });
 
-  it('expone el recurso de auditoría aunque no haya sesiones', async () => {
+  it('expone la plantilla del recurso de auditoría aunque no haya sesiones', async () => {
     const { client, close } = await createHarness();
 
     try {
-      const { resources } = await client.listResources();
-      expect(resources.map((resource) => resource.uri)).toEqual(['oracle://audit/sessions']);
+      const { resourceTemplates } = await client.listResourceTemplates();
+      expect(resourceTemplates.map((template) => template.uriTemplate)).toEqual([
+        'oracle://audit/session/{id}',
+      ]);
     } finally {
       await close();
     }
