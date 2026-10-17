@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { registerAuditResource } from './audit/audit-resource.js';
-import { DEFAULT_SERVER_VERSION, type ResolvedConfig } from './config.js';
+import { type ResolvedConfig } from './config.js';
 import { createOracleDataAccess, createPoolProvider } from './db/pool.js';
 import type { DataAccess } from './db/data-access.js';
 import { registerToolGroups } from './tools/registry.js';
@@ -41,10 +41,7 @@ export function createServer(deps: CreateServerDeps): ServerHandle {
   const { config } = deps;
   const dataAccess = deps.dataAccess ?? createOracleDataAccess(createPoolProvider(config));
 
-  const server = new McpServer(
-    { name: SERVER_NAME, version: config.serverVersion || DEFAULT_SERVER_VERSION },
-    { capabilities: { logging: {} } },
-  );
+  const server = new McpServer({ name: SERVER_NAME, version: config.serverVersion });
   const context: ServerContext = { server, dataAccess, config };
   registerToolGroups(context);
   registerAuditResource(context);

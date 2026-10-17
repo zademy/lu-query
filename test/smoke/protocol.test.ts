@@ -24,11 +24,12 @@ describe('protocolo MCP sobre stdio simulado', () => {
     }
   });
 
-  it('declara capacidades de solo lectura al arrancar', async () => {
+  it('expone el recurso de auditoría aunque no haya sesiones', async () => {
     const { client, close } = await createHarness();
 
     try {
-      expect(client.getServerCapabilities()).toBeDefined();
+      const { resources } = await client.listResources();
+      expect(resources.map((resource) => resource.uri)).toEqual(['oracle://audit/sessions']);
     } finally {
       await close();
     }
