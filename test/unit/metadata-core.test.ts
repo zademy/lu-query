@@ -176,7 +176,7 @@ describe('describe_table', () => {
   it('falla con isError cuando no hay schema explícito ni configurado', async () => {
     // La session no devuelve schema (fila vacia): entonces no hay de donde saca.
     const dataAccess = new FakeDataAccess()
-      .on(/SYS_CONTEXT/, () => ({ rows: [] }))
+      .on((call) => call.sql.includes('SYS_CONTEXT'), () => ({ rows: [] }))
       .always(() => ({ rows: COLUMNS }));
 
     await withHarness({ dataAccess, config: { schema: undefined } }, async (harness) => {
