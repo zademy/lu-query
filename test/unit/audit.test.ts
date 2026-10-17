@@ -1,8 +1,9 @@
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { listAuditSessions, readAuditSession } from '../../src/audit/audit-reader.js';
 import { createFileAuditWriter } from '../../src/audit/audit-writer.js';
 import {
   auditFileName,
@@ -216,5 +217,48 @@ describe('createFileAuditWriter', () => {
     const markdown = await readFile(join(dir, auditFileName(SESSION_ID)), 'utf8');
     expect(markdown.match(/^### /gm)).toHaveLength(3);
     expect(markdown).toContain('### #3 · 14:32:07 · c');
+  });
+});
+
+describe('audit reader', () => {
+  async function writeSession(id: string, markdown: string): Promise<void> {
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, auditFileName(id)), markdown, 'utf8');
+  }
+
+  it('lista los ids reales de sesión y descarta lo que no es un log', async () => {
+    await writeSession('20260101T101010.100000000+0000', 'a');
+    await writeSession('20260101T101010.100000000+0000-002', 'b');
+    await writeSession('20260101T101010.100000000-0600', 'c');
+    await writeFile(join(dir, 'notas.md'), 'ignorado');
+    await writeFile(join(dir, 'lu-query-20260101T1010.100-0600-log.md'), 'formato viejo');
+
+    expect(await listAuditSessions(dir)).toEqual([
+      '20260101T101010.100000000+0000',
+      '20260101T101010.100000000+0000-002',
+      '20260101T101010.100000000-0600',
+    ]);
+  });
+
+  it('devuelve el Markdown crudo de la sesión y undefined si no existe', async () => {
+    await writeSession(SESSION_ID, renderAuditEntry(record()));
+
+    expect(await readAuditSession(dir, SESSION_ID)).toContain('| Parámetros |');
+    expect(await readAuditSession(dir, '20260101T101010.100000000+0000')).toBeUndefined();
+  });
+
+  it('tolera un archivo truncado a media entrada', async () => {
+    const truncated = `${renderAuditEntry(record())}${renderAuditEntry(record()).slice(0, 40)}`;
+    await writeSession(SESSION_ID, truncated);
+
+    expect(await readAuditSession(dir, SESSION_ID)).toBe(truncated);
+  });
+
+  it('no acepta ids que no son sesiones de auditoría', async () => {
+    await writeFile(join(dir, 'passwd'), 'root:x:0:0');
+
+    expect(await readAuditSession(dir, '../passwd')).toBeUndefined();
+    expect(await readAuditSession(dir, 'current')).toBeUndefined();
+    expect(await listAuditSessions(dir)).toEqual([]);
   });
 });
