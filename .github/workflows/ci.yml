@@ -11,11 +11,13 @@ concurrency:
 
 jobs:
   test:
-    name: test (Node ${{ matrix.node }})
-    runs-on: ubuntu-latest
+    name: test (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        # Ejes: SO x Node. El nombre del job alimenta los required checks de master.
+        os: [ubuntu-latest, macos-latest, windows-latest]
         node: [22, 24, 26]
     steps:
       - uses: actions/checkout@v5
@@ -32,3 +34,6 @@ jobs:
       # Unit + smoke tests: sin Oracle (la suite integration requiere contenedor real).
       - run: npm test
       - run: npm run build
+
+      # La suite de integracion necesita un Oracle real; corre solo en Linux por el soporte
+      # del script de grants (docker exec sqlplus). Ver CONTRIBUTING.md.
