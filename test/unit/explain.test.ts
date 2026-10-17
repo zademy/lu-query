@@ -16,7 +16,7 @@ const PLAN_TEXT = 'Plan Table\nOperation\n--------\nTABLE ACCESS FULL';
 const FULL_SCAN_ROW = {
   OBJECT_OWNER: 'DEVUSER',
   OBJECT_NAME: 'EMPLOYEES',
-  OPERATION: 'TABLE',
+  OPERATION: 'TABLE ACCESS',
   OPTIONS: 'FULL',
   COST: 42,
   ACCESS_PREDICATES: null,
@@ -62,11 +62,11 @@ function backend({
   const data = new FakeDataAccess();
   const reply = (call: { sql: string }) => {
     if (failOn?.test(call.sql)) throw error;
-    if (/^\s*EXPLAIN PLAN/.test(call.sql)) return { rowCount: 1 };
+    if (call.sql.includes('EXPLAIN PLAN SET STATEMENT_ID')) return { rowCount: 1 };
     if (call.sql.includes('DBMS_XPLAN.DISPLAY')) {
       return { rows: [{ PLAN_TABLE_OUTPUT: planText }] };
     }
-    if (/^\s*DELETE FROM plan_table/i.test(call.sql)) return { rowCount: 1 };
+    if (call.sql.includes('DELETE FROM plan_table')) return { rowCount: 1 };
     if (call.sql.includes('FROM plan_table')) return { rows: planRows };
     if (call.sql.includes('all_indexes')) return { rows: indexRows };
     if (call.sql.includes('all_tab_col_statistics')) return { rows: colStats };
@@ -135,7 +135,7 @@ describe('tools/list · grupo Explain', () => {
 });
 
 describe('explain_plan', () => {
-  it('devuelve el plan de DBMS_XPLAN sin ejecutar el SQL y limpia la fila', async () => {
+  it('describe el SQL sin ejecutarlo y lo manda como bind, no concatenado', async () => {
     const dataAccess = backend({});
 
     await withHarness({ dataAccess }, async (harness) => {
@@ -144,13 +144,17 @@ describe('explain_plan', () => {
       expect(result.isError).toBeFalsy();
       expect(text(result)).toBe(PLAN_TEXT);
 
-      const explainCall = dataAccess.calls.find((c) => c.sql.startsWith('EXPLAIN PLAN'));
-      expect(explainCall?.sql).toContain('FOR SELECT * FROM EMPLOYEES');
+      const explainCall = dataAccess.calls.find((c) =>
+        c.sql.includes('EXPLAIN PLAN SET STATEMENT_ID'),
+      );
+      expect(explainCall?.method).toBe('execute');
+      expect(explainCall?.sql).not.toContain('SELECT * FROM EMPLOYEES');
+      expect(explainCall?.binds?.[1]).toBe('SELECT * FROM EMPLOYEES');
 
       const display = dataAccess.calls.find((c) => c.sql.includes('DBMS_XPLAN.DISPLAY'));
       expect(display?.binds?.[0]).toMatch(/^mcp_/);
 
-      const cleanup = dataAccess.calls.find((c) => c.sql.startsWith('DELETE FROM plan_table'));
+      const cleanup = dataAccess.calls.find((c) => c.sql.includes('DELETE FROM plan_table'));
       expect(cleanup?.binds?.[0]).toBe(display?.binds?.[0]);
     });
   });
@@ -187,7 +191,7 @@ describe('explain_plan', () => {
 
   it('falla con instrucción clara cuando falta el PLAN_TABLE', async () => {
     const dataAccess = backend({
-      failOn: /^EXPLAIN PLAN/,
+      failOn: /EXPLAIN PLAN SET STATEMENT_ID/,
       error: new DataAccessError('ORA-00980: plan_table does not exist', 'ORA-00980'),
     });
 
@@ -202,7 +206,7 @@ describe('explain_plan', () => {
 
   it('falla igual si el usuario no tiene privilegio sobre el PLAN_TABLE', async () => {
     const dataAccess = backend({
-      failOn: /^EXPLAIN PLAN/,
+      failOn: /EXPLAIN PLAN SET STATEMENT_ID/,
       error: new DataAccessError('ORA-01031: insufficient privileges', 'ORA-01031'),
     });
 
@@ -419,7 +423,7 @@ describe('run_sql_tuning_advisor', () => {
       expect(result.isError).toBeFalsy();
       expect(text(result)).toContain('SQL Tuning Report');
 
-      const create = dataAccess.calls.find((c) => c.sql.includes('CREATE_SQL_TUNING_TASK'));
+      const create = dataAccess.calls.find((c) => c.sql.includes('CREATE_TUNING_TASK'));
       expect(create?.binds).toEqual([
         'SELECT * FROM EMPLOYEES',
         expect.stringMatching(/^mcp_sta_/),
@@ -438,7 +442,7 @@ describe('run_sql_tuning_advisor', () => {
 
   it('falla con la guía de privilegio cuando el usuario no tiene ADVISOR', async () => {
     const dataAccess = backend({
-      failOn: /CREATE_SQL_TUNING_TASK/,
+      failOn: /CREATE_TUNING_TASK/,
       error: new DataAccessError('ORA-01031: insufficient privileges', 'ORA-01031'),
     });
 

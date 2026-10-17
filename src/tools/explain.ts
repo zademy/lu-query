@@ -21,12 +21,16 @@ const ADVISOR_MISSING = /ORA-01031\b|ORA-13616\b|ORA-24470\b/;
 /** PLAN_TABLE inexistente (ORA-00980) o sin privilegio para el usuario (ORA-01031). */
 const PLAN_TABLE_MISSING = /ORA-00980\b|ORA-01031\b/;
 
-/** Contador que hace único cada statement_id/task_name dentro del proceso. */
+/**
+ * statement_id/task_name propios de cada llamada: el PLAN_TABLE es compartido y
+ * dos llamadas seguidas no pueden pisarse. El contador garantiza unicidad en el
+ * proceso y la fecha lo deja corto (STATEMENT_ID es VARCHAR2(30)).
+ */
 let sequence = 0;
 
 function nextId(prefix: string): string {
   sequence += 1;
-  return `${prefix}_${process.hrtime.bigint()}_${sequence}`;
+  return `${prefix}_${Date.now()}_${sequence}`;
 }
 
 /** Resultado de `suggest_index`, con los mismos campos que el record IndexSuggestion del Java. */
@@ -76,10 +80,32 @@ async function explainPlan(dataAccess: DataAccess, sql: string): Promise<string>
   }
 }
 
+/**
+ * El pool no usa autoCommit y da una conexión nueva por sentencia, así que la
+ * fila del plan moriría al cerrar su conexión y la siguiente sentencia
+ * (DBMS_XPLAN.DISPLAY) no la vería. Por eso EXPLAIN PLAN y el borrado van en
+ * bloques autónomos que confirman dentro. El Java no lo necesita: HikariCP
+ * autocomitea. El SQL del usuario viaja como bind y se concatena en la BD.
+ */
+const PLAN_SQL = `DECLARE
+  v_statement VARCHAR2(32767) := 'EXPLAIN PLAN SET STATEMENT_ID = ''' || :id || ''' FOR ' || :sql;
+  PRAGMA AUTONOMOUS_TRANSACTION;
+BEGIN
+  EXECUTE IMMEDIATE v_statement;
+  COMMIT;
+END;`;
+
+const PLAN_CLEANUP_SQL = `DECLARE
+  PRAGMA AUTONOMOUS_TRANSACTION;
+BEGIN
+  DELETE FROM plan_table WHERE statement_id = :id;
+  COMMIT;
+END;`;
+
 /** `EXPLAIN PLAN` con ORA-00980/ORA-01031 traducidos a la instrucción de setup. */
 async function runPlan(dataAccess: DataAccess, statementId: string, sql: string): Promise<void> {
   try {
-    await dataAccess.execute(`EXPLAIN PLAN SET STATEMENT_ID = '${statementId}' FOR ${sql}`);
+    await dataAccess.execute(PLAN_SQL, [statementId, sql]);
   } catch (error) {
     if (PLAN_TABLE_MISSING.test(String((error as Error)?.message ?? ''))) {
       throw new DataAccessError(
@@ -95,7 +121,7 @@ async function runPlan(dataAccess: DataAccess, statementId: string, sql: string)
 /** Borrado best-effort de la fila del plan (el Java lo traga a propósito). */
 async function cleanupPlan(dataAccess: DataAccess, statementId: string): Promise<void> {
   try {
-    await dataAccess.execute('DELETE FROM plan_table WHERE statement_id = :id', [statementId]);
+    await dataAccess.execute(PLAN_CLEANUP_SQL, [statementId]);
   } catch {
     // El análisis ya se devolvió: un fallo al limpiar no puede ensuciar el error.
   }
@@ -138,10 +164,12 @@ async function suggestIndex(
 
     const schema = str(candidate.OBJECT_OWNER);
     const table = str(candidate.OBJECT_NAME);
+    // `:table` no vale como nombre de bind: TABLE es palabra reservada
+    // (ORA-01745), igual que `:owner` casi lo es. Se usan nombres propios.
     const colStats = await dataAccess.queryForList(
       `SELECT column_name, num_distinct
        FROM all_tab_col_statistics
-       WHERE owner = :owner AND table_name = :table`,
+       WHERE owner = :col_owner AND table_name = :col_table`,
       [schema, table],
     );
 
@@ -157,7 +185,7 @@ function findFullScanCandidate(
   targetTable: string | undefined,
 ): OracleRow | undefined {
   const fullScans = planRows.filter((row) => {
-    if (text(row.OPERATION).toUpperCase() !== 'TABLE') return false;
+    if (text(row.OPERATION).toUpperCase() !== 'TABLE ACCESS') return false;
     if (text(row.OPTIONS).toUpperCase() !== 'FULL') return false;
     const table = row.OBJECT_NAME;
     if (typeof table !== 'string') return false;
@@ -276,10 +304,16 @@ function extractColumns(accessPredicates: unknown, filterPredicates: unknown): s
 
 // ---- list_unused_indexes ----------------------------------------------------
 
-async function listUnusedIndexes(dataAccess: DataAccess, schema: string): Promise<OracleRow[]> {
-  try {
-    return await dataAccess.queryForList(
-      `SELECT i.owner AS index_owner, i.index_name,
+/**
+ * Fuente del histórico de uso. `V$OBJECT_USAGE` no existe en las bases 26ai
+ * Free (autónomas, sin V$ de performance): su equivalente por usuario es
+ * `USER_OBJECT_USAGE`, con las mismas seis columnas. Se prueban en orden y solo
+ * se cae al segundo ante ORA-00942 (vista ausente o sin privilegio).
+ */
+const USAGE_SOURCES = ['v$object_usage', 'user_object_usage'];
+
+function indexUsageQuery(usage: string): string {
+  return `SELECT i.owner AS index_owner, i.index_name,
               i.table_owner, i.table_name,
               (SELECT LISTAGG(ic.column_name, ', ') WITHIN GROUP (ORDER BY ic.column_position)
                FROM all_ind_columns ic
@@ -291,24 +325,28 @@ async function listUnusedIndexes(dataAccess: DataAccess, schema: string): Promis
                    ELSE 'UNKNOWN' END AS likely_unused,
               u.start_monitoring, u.end_monitoring
        FROM all_indexes i
-       LEFT JOIN v$object_usage u
+       LEFT JOIN ${usage} u
          ON u.index_name = i.index_name AND u.table_name = i.table_name
        WHERE i.table_owner = :schema
-       ORDER BY i.table_owner, i.table_name, i.index_name`,
-      [schema],
-    );
-  } catch (error) {
-    const message = String((error as Error)?.message ?? '');
-    if (!message.includes('ORA-00942')) throw error;
-    return [
-      {
-        NOTE:
-          'Index usage view V$OBJECT_USAGE is not accessible on this database (missing grant or the view ' +
-          'does not exist on this Oracle release), so unused-index detection is unavailable. ' +
-          'Ask the DBA to grant SELECT on SYS.V_$OBJECT_USAGE or verify the view exists.',
-      },
-    ];
+       ORDER BY i.table_owner, i.table_name, i.index_name`;
+}
+
+async function listUnusedIndexes(dataAccess: DataAccess, schema: string): Promise<OracleRow[]> {
+  for (const usage of USAGE_SOURCES) {
+    try {
+      return await dataAccess.queryForList(indexUsageQuery(usage), [schema]);
+    } catch (error) {
+      if (!String((error as Error)?.message ?? '').includes('ORA-00942')) throw error;
+    }
   }
+  return [
+    {
+      NOTE:
+        'Index usage view V$OBJECT_USAGE is not accessible on this database (missing grant or the view ' +
+        'does not exist on this Oracle release), so unused-index detection is unavailable. ' +
+        'Ask the DBA to grant SELECT on SYS.V_$OBJECT_USAGE or verify the view exists.',
+    },
+  ];
 }
 
 // ---- run_sql_tuning_advisor -------------------------------------------------
@@ -318,7 +356,9 @@ async function runSqlTuningAdvisor(dataAccess: DataAccess, sql: string): Promise
   try {
     await scalar(
       dataAccess,
-      `SELECT DBMS_SQLTUNE.CREATE_SQL_TUNING_TASK(
+      // CREATE_TUNING_TASK, no CREATE_SQL_TUNING_TASK: desde 26ai la versión
+      // antigua no es callable desde SQL (ORA-00904) y esta devuelve el task_name.
+      `SELECT DBMS_SQLTUNE.CREATE_TUNING_TASK(
                 sql_text => :sql, scope => 'COMPREHENSIVE',
                 time_limit => 30, task_name => :task,
                 description => 'MCP SQL Tuning Advisor') FROM dual`,
@@ -329,8 +369,12 @@ async function runSqlTuningAdvisor(dataAccess: DataAccess, sql: string): Promise
     ]);
     return await scalar(
       dataAccess,
-      `SELECT DBMS_SQLTUNE.REPORT_TUNING_TASK(task_name => :task,
-                type => 'TEXT', level => 'TYPICAL', section => 'ALL') FROM dual`,
+      // SUBSTR y no el CLOB directo: el pool cierra la conexión tras la
+      // sentencia y un LOB se vuelve ilegible. Tope: 32767 bytes de VARCHAR2.
+      // shortcut: si Oracle devolviera el LOB materializado, leerlo entero.
+      `SELECT DBMS_LOB.SUBSTR(DBMS_SQLTUNE.REPORT_TUNING_TASK(
+                task_name => :task, type => 'TEXT', level => 'TYPICAL', section => 'ALL'),
+                32767, 1) AS report FROM dual`,
       [taskName],
     );
   } catch (error) {
@@ -357,7 +401,12 @@ async function runSqlTuningAdvisor(dataAccess: DataAccess, sql: string): Promise
   }
 }
 
-/** Valor escalar de una fila de una función SQL (el Java lo mapea a String). */
+/**
+ * Valor escalar de una fila de una función SQL (el Java lo mapea a String).
+ * El reporte del advisor sale como VARCHAR2 y no como CLOB a propósito: el
+ * pool cierra la conexión al terminar la sentencia y un LOB perezoso se
+ * quedaría ilegible (NJS-003).
+ */
 async function scalar(dataAccess: DataAccess, sql: string, binds: string[]): Promise<string> {
   const row = await dataAccess.queryForObject(sql, binds);
   return text(Object.values(row ?? {})[0]);
