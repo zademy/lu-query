@@ -221,6 +221,16 @@ Requires `SELECT ANY DICTIONARY` (or equivalent) on the database user; tools ret
 
 `review-sql-performance`, `explain-schema`, `debug-invalid-plsql`, `safe-dml-plan`, `data-quality-audit`, `triage-database-incident`, `prepare-plsql-call`, `operating-rules`, `oracle-sql-style` — read-only working guides for common Oracle tasks through these tools.
 
+## Agent skills (optional)
+
+Copyable skill folders teach an agent how to use these 75 tools well - which tool for which job, in what order, what mutates, how failures look, and how to read results:
+
+```bash
+cp -r node_modules/lu-query/skills/lu-query-* ~/.claude/skills/   # Claude Code / OpenCode
+```
+
+Eight skills (`lu-query-explore-schema`, `lu-query-query-data`, `lu-query-audit-data-quality`, `lu-query-plan-data-changes`, `lu-query-manage-schema`, `lu-query-use-plsql`, `lu-query-tune-sql`, `lu-query-triage-incident`), each with tool references and examples verified against a real Oracle 26ai database. See [`skills/README.md`](skills/README.md). Nothing is installed automatically.
+
 ## Security
 
 See [SECURITY.md](SECURITY.md). Highlights: stdio only (no ports), identifier allow-list, escaped literals, audit directory must be protected. The database user should be least-privilege: the server relies on Oracle grants, not on its own checks, for anything the tools do not validate.
