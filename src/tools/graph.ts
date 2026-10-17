@@ -241,6 +241,9 @@ async function validateFkIntegrity(
     );
     const cols = (alias: string, columns: string[]) =>
       columns.map((column) => `${alias}."${column}"`).join(', ');
+    // `NOT IN` con un NULL en la lista del padre devuelve UNKNOWN para todas las
+    // filas, asi que el conteo daria 0 huerfanos aunque si los haya. Es el
+    // comportamiento del Java original, conservado por paridad.
     const orphanRow = await dataAccess.queryForObject(
       `SELECT COUNT(*) AS orphans FROM ${qualifiedName(schema, table)} c
         WHERE (${cols('c', childColumns)}) NOT IN

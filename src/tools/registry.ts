@@ -15,7 +15,10 @@ import { registerSystem } from './system.js';
 /** Un grupo de tools: registra sobre `ctx.server` lo que le toca. */
 export type ToolGroup = (ctx: ServerContext) => void;
 
-/** Orden fijo de registro (paridad con el Java). */
+/**
+ * Orden fijo de registro (paridad con el Java). `ticket` es el numero de ticket
+ * de migracion del grupo en el repo original: sirve para rastrear el origen.
+ */
 export const toolGroups: { ticket: number; name: string; register: ToolGroup }[] = [
   { ticket: 3, name: 'system', register: registerSystem },
   { ticket: 5, name: 'query', register: registerQuery },

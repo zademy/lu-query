@@ -51,6 +51,7 @@ function trimmed(value: string | undefined): string | undefined {
   return result ? result : undefined;
 }
 
+/** Convencion heredada del Java: solo `false`, `0` y `no` apagan; todo lo demas enciende. */
 function bool(value: string | undefined, fallback: boolean): boolean {
   const raw = trimmed(value)?.toLowerCase();
   if (raw === undefined) return fallback;

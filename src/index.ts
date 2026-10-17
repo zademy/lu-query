@@ -17,6 +17,8 @@ try {
   sink = createSentrySink(config);
   const handle = await startStdioServer(config);
   process.stderr.write(`lu-query ${config.serverVersion} escuchando MCP sobre stdio\n`);
+  // Cerrar antes de salir: el pool de Oracle se queda colgado si el proceso muere,
+  // y el flush de Sentry pierde la excepcion si no se espera.
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.once(signal, () => {
       void handle

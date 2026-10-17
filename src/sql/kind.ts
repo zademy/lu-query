@@ -2,7 +2,11 @@
 export type StatementKind =
   'select' | 'insert' | 'update' | 'delete' | 'merge' | 'ddl' | 'plsql' | 'explain' | 'unknown';
 
-/** Quita comentarios y punto y coma inicial/final para poder leer el verbo. */
+/**
+ * Quita comentarios y punto y coma inicial/final para poder leer el verbo.
+ * Los regex no distinguen literales de cadena, asi que `'a--b'` se mutila;
+ * es inofensivo porque de la sentencia solo importa la primera palabra.
+ */
 export function stripSqlNoise(sql: string): string {
   return sql
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
