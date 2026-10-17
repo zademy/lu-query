@@ -1,6 +1,17 @@
 # Changelog
 
-Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.1.0/); versionado alineado con `mcp-oracle-db` para reflejar la paridad.
+Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.1.0/). El número de versión de `package.json` es la fuente de verdad: el workflow de release crea el tag `v<version>` al mergear a master.
+
+## [2.14.0] - 2026-10-17
+
+### Añadido
+
+- **Skills opcionales para agentes** en `skills/` (dentro del paquete npm): 8 carpetas por tarea - explore-schema, query-data, audit-data-quality, plan-data-changes, manage-schema, use-plsql, tune-sql, triage-incident - que cubren las 75 tools con referencias de firmas y ejemplos verificados contra una base Oracle real. Se copian a mano al directorio de skills del agente; nada se instala automáticamente.
+- README (EN/ES) con sección de instalación de las skills; `GLOSSARY.md` incorpora los términos _Skill_ y _Ejemplo verificado_.
+
+### Cambios internos
+
+- La versión reportada por el server (`DEFAULT_SERVER_VERSION`) y las expectativas de los tests derivan ahora de `package.json`, con un test que detecta drift: `package.json` es la única fuente de verdad del número de release.
 
 ## [2.13.0] — 2026-10-17
 

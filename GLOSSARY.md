@@ -39,3 +39,11 @@ _Avoid_: validación SQL, filtro SQL
 **Schema de sesión**:
 El schema vigente de la sesión Oracle (CURRENT_SCHEMA) cuando ni la tool ni la configuración especifican uno.
 _Avoid_: schema por defecto, schema del usuario
+
+**Skill**:
+Carpeta opcional con un `SKILL.md` que enseña a un agente cómo usar este server por tarea (explorar, consultar, auditar, cambiar, afinar, diagnosticar). Se copia al directorio de skills del agente; no se instala sola.
+_Avoid_: documentación de la API, tutorial, plugin
+
+**Ejemplo verificado**:
+Tool call reproducida contra una base real, con su salida real citada; se distingue de la cobertura meramente documental.
+_Avoid_: ejemplo inventado, snippet ilustrativo
