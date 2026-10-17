@@ -2,6 +2,19 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.1.0/). El número de versión de `package.json` es la fuente de verdad: el workflow de release crea el tag `v<version>` al mergear a master.
 
+## [2.15.0] - 2026-10-17
+
+### Anadido
+
+- **Video promocional** de 33 s (`docs/lu-query-promo.mp4`: 1920x1080, 30 fps, H.264) generado con Remotion en `video/`, reproducible en el README mediante el asset del issue. Workspace de video aislado: no entra al paquete npm ni a CI.
+- `video/README.md` documenta como re-renderizar el video y las reglas de estilo (motion graphics propios, sin logos ni assets de terceros).
+
+### Cambios
+
+- CI sin `cache: npm` (ocupa espacio en el runner sin aportar a una instalacion limpia).
+- `eslint` ignora `.agents/**`: las skills de agente traen assets vendorizados que rompian el lint de raiz (`.prettierignore` ya lo hacia).
+- README (EN/ES): el promo queda en una sola linea bajo los badges, sin repetir el banner.
+
 ## [2.14.1] - 2026-10-17
 
 ### Cambios internos
