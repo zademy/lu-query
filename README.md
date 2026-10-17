@@ -241,4 +241,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Releasing to npm is manual and done by t
 
 ## License
 
-MIT (c) 2026 Sadot Hdz
+MIT (c) 2026 Sadot Hernández Moreno

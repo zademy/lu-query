@@ -241,4 +241,4 @@ Ver [CONTRIBUTING.md](CONTRIBUTING.md). La publicación a npm es manual y la hac
 
 ## Licencia
 
-MIT (c) 2026 Sadot Hdz
+MIT (c) 2026 Sadot Hernández Moreno
