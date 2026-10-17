@@ -7,8 +7,8 @@ const SESSION_ID = String.raw`\d{8}T\d{6}\.\d{9}[+-]\d{4}(?:-\d{3})?`;
 
 const FILE_NAME = new RegExp(String.raw`^[a-z-]+-(${SESSION_ID})-log\.md$`);
 
-/** Un id de sesión es válido solo con esa forma: evitaeurban escapes fuera del dir. */
-export function isAuditSessionId(sessionId: string): boolean {
+/** Un id de sesión solo es válido con esa forma: evita escapes fuera del dir. */
+function isAuditSessionId(sessionId: string): boolean {
   return new RegExp(String.raw`^${SESSION_ID}$`).test(sessionId);
 }
 
