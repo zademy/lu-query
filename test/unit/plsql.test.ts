@@ -220,11 +220,11 @@ describe('call_procedure', () => {
     });
   });
 
-  it('función sin argumentos: SELECT … FROM DUAL y returnValue', async () => {
+  it('función sin argumentos: bloque nativo con bind de retorno', async () => {
     await withHarness({}, async (harness) => {
       harness.dataAccess.on(
-        (c) => c.method === 'queryForList',
-        () => ({ rows: [{ returnValue: 4 }] }),
+        (c) => c.method === 'call',
+        () => ({ outRow: { '1': 4 } }),
       );
 
       const result = payload<CallResult>(
@@ -239,19 +239,18 @@ describe('call_procedure', () => {
 
       expect(result).toEqual({ outParams: {}, returnValue: 4, cursorResult: null });
       expect(harness.dataAccess.calls).toContainEqual({
-        method: 'queryForList',
-        sql: 'SELECT "DEVUSER"."GET_EMPLOYEE_COUNT"() AS "returnValue" FROM DUAL',
-        binds: [],
-        options: { maxRows: 1 },
+        method: 'call',
+        sql: ':1 := "DEVUSER"."GET_EMPLOYEE_COUNT"()',
+        binds: [{ dir: 'OUT', type: 'NUMBER' }],
       });
     });
   });
 
-  it('función con argumentos IN: binds posicionales en el SELECT', async () => {
+  it('función con argumentos IN: bind de retorno primero, luego los IN', async () => {
     await withHarness({}, async (harness) => {
       harness.dataAccess.on(
-        (c) => c.method === 'queryForList',
-        () => ({ rows: [{ returnValue: 7 }] }),
+        (c) => c.method === 'call',
+        () => ({ outRow: { '1': 7 } }),
       );
 
       await call(harness, 'call_procedure', {
@@ -263,19 +262,18 @@ describe('call_procedure', () => {
       });
 
       expect(harness.dataAccess.calls).toContainEqual({
-        method: 'queryForList',
-        sql: 'SELECT "DEVUSER"."GET_EMPLOYEE_COUNT"(:1) AS "returnValue" FROM DUAL',
-        binds: [2],
-        options: { maxRows: 1 },
+        method: 'call',
+        sql: ':1 := "DEVUSER"."GET_EMPLOYEE_COUNT"(:2)',
+        binds: [{ dir: 'OUT', type: 'NUMBER' }, 2],
       });
     });
   });
 
-  it('OUT/INOUT escalares: wrapper WITH FUNCTION que devuelve JSON de los OUT', async () => {
+  it('OUT/INOUT escalares: binds nativos de salida, outParams por nombre', async () => {
     await withHarness({}, async (harness) => {
       harness.dataAccess.on(
-        (c) => c.method === 'queryForList' && c.sql.startsWith('WITH FUNCTION'),
-        () => ({ rows: [{ resultado: '{"P_OUT":"out:7","P_IO":30}' }] }),
+        (c) => c.method === 'call',
+        () => ({ outRow: { '1': 'out:7', '2': 30 } }),
       );
 
       const result = payload<CallResult>(
@@ -295,19 +293,19 @@ describe('call_procedure', () => {
         returnValue: null,
         cursorResult: null,
       });
-
-      const wrapper = harness.dataAccess.calls.find((c) => c.sql.startsWith('WITH FUNCTION'));
-      expect(wrapper?.sql).toContain('"DEVUSER"."T11_PROBE_RO"');
-      expect(wrapper?.sql).toContain('JSON_OBJECT');
-      expect(wrapper?.binds).toEqual([7, 3]);
+      expect(harness.dataAccess.calls).toContainEqual({
+        method: 'call',
+        sql: '"DEVUSER"."T11_PROBE_RO"(:1, :2, :3)',
+        binds: [7, { dir: 'OUT' }, { val: 3, dir: 'INOUT', type: 'NUMBER' }],
+      });
     });
   });
 
-  it('función con OUT: el wrapper incluye returnValue en el JSON', async () => {
+  it('función con OUT: returnValue del primer bind, OUTs por nombre', async () => {
     await withHarness({}, async (harness) => {
       harness.dataAccess.on(
-        (c) => c.method === 'queryForList' && c.sql.startsWith('WITH FUNCTION'),
-        () => ({ rows: [{ resultado: '{"returnValue":42,"P_OUT":"ok"}' }] }),
+        (c) => c.method === 'call',
+        () => ({ outRow: { '1': 42, '2': 'ok' } }),
       );
 
       const result = payload<CallResult>(
@@ -386,29 +384,48 @@ describe('call_procedure', () => {
     });
   });
 
-  it('REF CURSOR queda como pendiente del chokepoint: isError explícito', async () => {
+  it('REF CURSOR OUT: el primer cursor viaja en cursorResult como filas', async () => {
     await withHarness({}, async (harness) => {
-      const result = await call(harness, 'call_procedure', {
-        schema: DEVUSER,
-        name: 'P',
-        args: '[{"name":"P_C","direction":"OUT","dataType":"REF CURSOR"}]',
+      const rows = [{ EMP_ID: 1 }, { EMP_ID: 2 }];
+      harness.dataAccess.on(
+        (c) => c.method === 'call',
+        () => ({ outRow: { '1': rows } }),
+      );
+
+      const result = payload<CallResult>(
+        await call(harness, 'call_procedure', {
+          schema: DEVUSER,
+          name: 'P',
+          args: '[{"name":"P_C","direction":"OUT","dataType":"REF CURSOR"}]',
+        }),
+      );
+      expect(result).toEqual({ outParams: {}, returnValue: null, cursorResult: rows });
+      expect(harness.dataAccess.calls).toContainEqual({
+        method: 'call',
+        sql: '"DEVUSER"."P"(:1)',
+        binds: [{ dir: 'OUT', type: 'CURSOR' }],
       });
-      expect(result.isError).toBe(true);
-      expect(result.content[0]?.text).toContain('REF CURSOR');
     });
   });
 
-  it('returnType REF CURSOR de función: isError explícito', async () => {
+  it('returnType REF CURSOR de función: el retorno se fetchea a filas', async () => {
     await withHarness({}, async (harness) => {
-      const result = await call(harness, 'call_procedure', {
-        schema: DEVUSER,
-        name: 'FN',
-        args: '[]',
-        isFunction: true,
-        returnType: 'REF CURSOR',
-      });
-      expect(result.isError).toBe(true);
-      expect(result.content[0]?.text).toContain('REF CURSOR');
+      const rows = [{ N: 1 }];
+      harness.dataAccess.on(
+        (c) => c.method === 'call',
+        () => ({ outRow: { '1': rows } }),
+      );
+
+      const result = payload<CallResult>(
+        await call(harness, 'call_procedure', {
+          schema: DEVUSER,
+          name: 'FN',
+          args: '[]',
+          isFunction: true,
+          returnType: 'REF CURSOR',
+        }),
+      );
+      expect(result).toEqual({ outParams: {}, returnValue: null, cursorResult: rows });
     });
   });
 

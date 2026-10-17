@@ -145,12 +145,30 @@ describe('createOracleDataAccess sobre el pool', () => {
     await expect(db.execute('DELETE FROM employees WHERE id = :id', [42])).resolves.toBe(3);
   });
 
-  it('call envuelve la llamada en un bloque PL/SQL anónimo', async () => {
-    const { provider, executed } = fakeBackend(() => ({ rows: [{ RESULT: 5 }] }));
+  it('call devuelve los OUT binds serializados y envuelve en BEGIN', async () => {
+    const { provider, executed } = fakeBackend(() => ({ rows: [], outBinds: { '1': 5 } }));
     const db = createOracleDataAccess(provider);
 
-    await expect(db.call('get_employee_count(:id)', [1])).resolves.toEqual([{ RESULT: 5 }]);
+    await expect(db.call('get_employee_count(:id)', [{ dir: 'OUT' }])).resolves.toEqual({ '1': 5 });
     expect(executed[0]?.sql).toBe('BEGIN get_employee_count(:id); END;');
+  });
+
+  it('call fetchea los REF CURSOR a filas antes de cerrarlos', async () => {
+    let closed = false;
+    const cursor = {
+      getRows: () => Promise.resolve([{ A: 1 }, { A: 2 }]),
+      close: () => {
+        closed = true;
+        return Promise.resolve();
+      },
+    };
+    const { provider } = fakeBackend(() => ({ rows: [], outBinds: { '1': cursor, '2': 42 } }));
+    const db = createOracleDataAccess(provider);
+
+    await expect(
+      db.call('open_cursor', [{ dir: 'OUT', type: 'CURSOR' }, { dir: 'OUT' }]),
+    ).resolves.toEqual({ '1': [{ A: 1 }, { A: 2 }], '2': 42 });
+    expect(closed).toBe(true);
   });
 
   it('envuelve un ORA del driver en DataAccessError con su código', async () => {

@@ -6,13 +6,22 @@
 
 export type OracleBind = string | number | boolean | Date | Uint8Array | null;
 
+/**
+ * Bind de una llamada PL/SQL: escalar (IN implícito) o definición con
+ * dirección; `type: 'CURSOR'` pide un REF CURSOR que el chokepoint fetchea
+ * a filas antes de devolverlo.
+ */
+export type OracleCallBind =
+  | OracleBind
+  | { val?: OracleBind; dir?: 'IN' | 'OUT' | 'INOUT'; type?: 'CURSOR' | 'NUMBER' | 'DATE' };
+
 /** Fila como objeto (OUT_FORMAT_OBJECT), que es lo que exponen las tools. */
 export type OracleRow = Record<string, unknown>;
 
 export interface OracleResult<Row = OracleRow> {
   rows: Row[];
   rowsAffected?: number;
-  outBinds?: OracleBind[];
+  outBinds?: Record<string, unknown> | unknown[];
 }
 
 export interface OracleConnection {
@@ -20,7 +29,7 @@ export interface OracleConnection {
   callTimeout: number;
   execute<Row = OracleRow>(
     sql: string,
-    binds?: OracleBind[],
+    binds?: unknown[],
     options?: Record<string, unknown>,
   ): Promise<OracleResult<Row>>;
   /** Cancela la sentencia en curso en el servidor (el ORA-01013 del Java). */
@@ -63,6 +72,13 @@ export interface OraclePoolAttributes {
 export interface OracleModule {
   CLOB: unknown;
   OUT_FORMAT_OBJECT: number;
+  BIND_IN: number;
+  BIND_INOUT: number;
+  BIND_OUT: number;
+  NUMBER: number;
+  DATE: number;
+  /** Tipo de bind para parámetros REF CURSOR (driver: DB_TYPE_CURSOR). */
+  DB_TYPE_CURSOR: unknown;
   createPool(attributes: OraclePoolAttributes): Promise<OraclePool>;
 }
 

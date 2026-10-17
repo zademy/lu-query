@@ -1,13 +1,16 @@
-import { TIMEOUTS, type ResolvedConfig } from '../config.js';
+import { MAX_ROWS, TIMEOUTS, type ResolvedConfig } from '../config.js';
 import { DataAccessError } from '../errors.js';
 import { isValidIdentifier } from '../security/identifiers.js';
 import { withAudit, type DataAccess, type QueryOptions } from './data-access.js';
 import {
   loadOracle,
   type OracleBind,
+  type OracleCallBind,
   type OracleConnection,
+  type OracleModule,
   type OraclePool,
   type OracleResult,
+  type OracleRow,
   type OracleSessionCallback,
 } from './oracle-types.js';
 
@@ -145,6 +148,59 @@ async function withConnection<T>(
   }
 }
 
+/** Traduce binds del chokepoint a binds del driver: `{val, dir, type}` para OUT/INOUT/CURSOR. */
+function toDriverCallBinds(oracledb: OracleModule, binds: OracleCallBind[]): unknown[] {
+  return binds.map((bind) => {
+    if (
+      bind === null ||
+      typeof bind !== 'object' ||
+      bind instanceof Date ||
+      bind instanceof Uint8Array
+    ) {
+      return bind;
+    }
+    const spec = bind;
+    const definition: { val: OracleBind; dir: number; type?: unknown } = {
+      val: spec.val ?? null,
+      dir:
+        spec.dir === 'OUT'
+          ? oracledb.BIND_OUT
+          : spec.dir === 'INOUT'
+            ? oracledb.BIND_INOUT
+            : oracledb.BIND_IN,
+    };
+    if (spec.type === 'CURSOR') definition.type = oracledb.DB_TYPE_CURSOR;
+    else if (spec.type === 'NUMBER') definition.type = oracledb.NUMBER;
+    else if (spec.type === 'DATE') definition.type = oracledb.DATE;
+    return definition;
+  });
+}
+
+/** outBinds → fila: los REF CURSOR se fetchean (cap MAX_ROWS) y se cierran antes de soltar la conexión. */
+async function serializeOutBinds(
+  out: Record<string, unknown> | unknown[] | undefined,
+): Promise<OracleRow> {
+  if (out === undefined) return {};
+  const entries = Array.isArray(out)
+    ? out.map((value, i) => [String(i + 1), value] as const)
+    : Object.entries(out);
+  const row: OracleRow = {};
+  for (const [key, value] of entries) {
+    if (
+      value !== null &&
+      typeof value === 'object' &&
+      typeof (value as { getRows?: unknown }).getRows === 'function'
+    ) {
+      const cursor = value as { getRows(max: number): Promise<OracleRow[]>; close(): Promise<void> };
+      row[key] = (await cursor.getRows(MAX_ROWS)) ?? [];
+      await cursor.close().catch(() => undefined);
+    } else {
+      row[key] = value;
+    }
+  }
+  return row;
+}
+
 /** Implementación real sobre node-oracledb thin. Único camino de todo el SQL. */
 export function createOracleDataAccess(provider: PoolProvider): DataAccess {
   const execute = (
@@ -196,7 +252,23 @@ export function createOracleDataAccess(provider: PoolProvider): DataAccess {
       return (await executeAndCommit(sql, binds, options)).rowsAffected ?? 0;
     },
     async call(callString, binds) {
-      return (await execute(`BEGIN ${callString}; END;`, binds, undefined)).rows;
+      const oracledb = await loadOracle();
+      const row = await withConnection(provider, (connection, outFormat) =>
+        withStatementTimeout(connection, TIMEOUTS.statementMs, async () => {
+          const result = await connection
+            .execute(`BEGIN ${callString}; END;`, toDriverCallBinds(oracledb, binds ?? []), {
+              outFormat,
+            })
+            .catch((error: unknown) => {
+              throw asDataAccessError(error, 'Oracle rechazó la llamada');
+            });
+          // Fetchea los cursores ANTES del commit y de soltar la conexión.
+          const serialized = await serializeOutBinds(result.outBinds);
+          await connection.commit();
+          return serialized;
+        }),
+      );
+      return row;
     },
     close() {
       return provider.close();

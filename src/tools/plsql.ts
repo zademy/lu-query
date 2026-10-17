@@ -4,24 +4,21 @@ import { withToolContext } from '../audit/context.js';
 import { resolveSchemaFor } from '../catalog/schema.js';
 import { MAX_ROWS } from '../config.js';
 import type { DataAccess } from '../db/data-access.js';
-import type { OracleBind } from '../db/oracle-types.js';
+import type { OracleBind, OracleCallBind } from '../db/oracle-types.js';
 import { SecurityError, guardTool } from '../errors.js';
-import { assertIdentifier, quoteLiteral } from '../security/identifiers.js';
+import { assertIdentifier } from '../security/identifiers.js';
 import type { ServerContext } from '../server.js';
 
 /**
  * Plsql — describe_plsql, call_procedure y el recurso plsql-source
  * (`PlsqlTools`/`PlsqlService`/`PlsqlCallExecutor` del Java).
  *
- * El Java usa `{ call … }` de JDBC con registro de OUT y cursor; el driver thin
- * también lo soporta (binds con `dir: BIND_OUT` y `outBinds`, verificado contra
- * el contenedor), pero el chokepoint `DataAccess` solo expone `.rows` de un
- * SELECT: `call()` descarta `outBinds` y no commitea. Por eso call_procedure
- * enruta: (a) solo-IN por bloque `BEGIN…END` vía `execute` (commitea, paridad
- * con el auto-commit del Java), (b) función sin OUT por `SELECT … FROM DUAL`,
- * (c) OUT/INOUT escalares por un wrapper `WITH FUNCTION` que devuelve el JSON
- * de los OUT. REF CURSOR queda pendiente de que el chokepoint exponga
- * `outBinds`/resultSets.
+ * El Java usa `{ call … }` de JDBC con registro de OUT y cursor; aquí el
+ * bloque PL/SQL equivalente lleva binds nativos de salida y el chokepoint
+ * serializa `outBinds` (los cursores se fetchean a filas) y commitea, como
+ * el auto-commit del Java. call_procedure enruta: (a) procedimiento solo-IN
+ * por `execute` (commitea igual), (b) función o cualquier OUT/INOUT/REF
+ * CURSOR por `call` con binds de salida.
  */
 
 /** Resultado de call_procedure (`PlsqlCallResult` del Java, mismo orden). */
@@ -90,6 +87,32 @@ function typeText(oracleType: unknown): string {
   return typeof oracleType === 'string' ? oracleType : '';
 }
 
+/** Tipo de driver para binds OUT/INOUT (`PlsqlCallExecutor.jdbcType`): NUMBER/DATE tipados, resto string como el Java. */
+function bindTypeOf(oracleType: unknown): 'NUMBER' | 'DATE' | undefined {
+  const t = typeText(oracleType).trim().toUpperCase();
+  if (
+    [
+      'NUMBER',
+      'NUMERIC',
+      'DECIMAL',
+      'INTEGER',
+      'INT',
+      'SMALLINT',
+      'FLOAT',
+      'BINARY_FLOAT',
+      'BINARY_DOUBLE',
+      'BINARY_INTEGER',
+      'PLS_INTEGER',
+      'NATURAL',
+      'POSITIVE',
+    ].includes(t)
+  ) {
+    return 'NUMBER';
+  }
+  if (t === 'DATE' || t.startsWith('TIMESTAMP')) return 'DATE';
+  return undefined;
+}
+
 function isCursorType(oracleType: unknown): boolean {
   const t = typeText(oracleType).trim().toUpperCase();
   return t === 'REF CURSOR' || t === 'CURSOR';
@@ -121,33 +144,6 @@ function requireSupportedType(oracleType: unknown, label: string): void {
   }
 }
 
-/** Tipo PL/SQL del wrapper por tipo Oracle (`PlsqlCallExecutor.jdbcType`, default VARCHAR). */
-function plsqlType(oracleType: unknown): string {
-  const t = typeText(oracleType).trim().toUpperCase();
-  if (
-    [
-      'NUMBER',
-      'NUMERIC',
-      'DECIMAL',
-      'INTEGER',
-      'INT',
-      'SMALLINT',
-      'FLOAT',
-      'BINARY_FLOAT',
-      'BINARY_DOUBLE',
-      'BINARY_INTEGER',
-      'PLS_INTEGER',
-      'NATURAL',
-      'POSITIVE',
-    ].includes(t)
-  ) {
-    return 'NUMBER';
-  }
-  if (t === 'DATE') return 'DATE';
-  if (t.startsWith('TIMESTAMP')) return 'TIMESTAMP';
-  if (t === 'CLOB' || t === 'NCLOB' || t === 'LONG') return 'CLOB';
-  return 'VARCHAR2(32767)';
-}
 
 /** Valor IN bindeable; los contenedores JSON no lo son. */
 function toBind(value: unknown, label: string): OracleBind {
@@ -198,16 +194,6 @@ export async function callProcedure(
   }
   for (const arg of parsed) requireSupportedType(arg.dataType, `argument '${arg.name ?? ''}'`);
 
-  // shortcut: REF CURSOR necesita outBinds/resultSets que el chokepoint no expone.
-  const cursorPending =
-    (isFunction && isCursorType(returnType)) || parsed.some((arg) => isCursorType(arg.dataType));
-  if (cursorPending) {
-    throw new SecurityError(
-      'REF CURSOR aún no se puede devolver: el chokepoint DataAccess solo expone las filas de un ' +
-        'SELECT (call() descarta outBinds). Pendiente de exponer outBinds/resultSets en db/*; ' +
-        'mientras tanto consulta directamente las tablas.',
-    );
-  }
 
   const qualifiedName = qualified(schema, name);
   const ins = parsed.filter((arg) => direction(arg) !== 'OUT');
@@ -224,56 +210,67 @@ export async function callProcedure(
     return { outParams: {}, returnValue: null, cursorResult: null };
   }
 
-  // (b) Función sin OUT: el returnValue sale como columna de un SELECT.
-  if (outs.length === 0 && isFunction) {
-    const rows = await dataAccess.queryForList(
-      `SELECT ${qualifiedName}(${placeholders(parsed.length)}) AS "returnValue" FROM DUAL`,
-      inBinds,
-      { maxRows: 1 },
-    );
-    return { outParams: {}, returnValue: rows[0]?.returnValue ?? null, cursorResult: null };
+  // (b) Función o cualquier OUT/INOUT (incluido REF CURSOR): bloque con binds
+  // nativos de salida, como el callable de JDBC del Java. El driver llena
+  // `outBinds`, y el chokepoint lo serializa (cursores a filas) y commitea.
+  const offset = isFunction ? 2 : 1;
+  const argsPlace = Array.from({ length: parsed.length }, (_, i) => `:${i + offset}`).join(', ');
+  const callString = isFunction
+    ? `:1 := ${qualifiedName}(${argsPlace})`
+    : `${qualifiedName}(${argsPlace})`;
+  const outBind = (arg: CallArg): OracleCallBind => {
+    if (isCursorType(arg.dataType)) return { dir: 'OUT', type: 'CURSOR' };
+    const dir = direction(arg);
+    const type = bindTypeOf(arg.dataType);
+    // Sin type el driver devuelve el OUT como string; NUMBER/DATE se tipan como en JDBC.
+    if (dir === 'IN') return toBind(arg.value, `'$arg.name ?? 'arg''`);
+    const spec: { val?: OracleBind; dir: 'OUT' | 'INOUT'; type?: 'NUMBER' | 'DATE' | 'CURSOR' } = { dir };
+    if (type !== undefined) spec.type = type;
+    if (dir === 'INOUT') spec.val = toBind(arg.value, `'${arg.name ?? 'arg'}'`);
+    return spec;
+  };
+  const retType = bindTypeOf(returnType);
+  const retBind: OracleCallBind = {
+    dir: 'OUT',
+    ...(isCursorType(returnType) ? { type: 'CURSOR' as const } : retType ? { type: retType } : {}),
+  };
+  const emptyBinds: OracleCallBind[] = [];
+  const binds: OracleCallBind[] = (isFunction ? [retBind] : emptyBinds).concat(
+    parsed.map((arg) =>
+      direction(arg) === 'IN' ? toBind(arg.value, `'${arg.name ?? 'arg'}'`) : outBind(arg),
+    ),
+  );
+
+  const out = await dataAccess.call(callString, binds);
+  const outParams: Record<string, unknown> = {};
+  let cursorResult: unknown = null;
+  let cursorTaken = false;
+  // Los outBinds posicionales traen SOLO los binds de salida, en orden: el
+  // retorno primero (si es función) y luego los OUT/INOUT de los argumentos.
+  let outIndex = isFunction ? 2 : 1;
+  parsed.forEach((arg) => {
+    if (direction(arg) === 'IN') return;
+    const value = out[String(outIndex)];
+    outIndex += 1;
+    if (isCursorType(arg.dataType)) {
+      // El primer cursor del call viaja en cursorResult (contrato del Java).
+      if (!cursorTaken) {
+        cursorResult = value;
+        cursorTaken = true;
+      } else {
+        outParams[arg.name ?? 'arg'] = value;
+      }
+    } else {
+      outParams[arg.name ?? 'arg'] = value;
+    }
+  });
+  let returnValue: unknown = null;
+  if (isFunction) {
+    const ret = out['1'] ?? null;
+    if (isCursorType(returnType)) cursorResult = ret;
+    else returnValue = ret;
   }
-
-  // (c) OUT/INOUT escalares: la unidad corre dentro de una función local del
-  // SELECT y los OUT vuelven como JSON de una sola fila. Solo lectura: si la
-  // unidad hace DML, Oracle levanta ORA-14551 (verificado contra el contenedor).
-  const params = ins.map((arg, i) => `b${i + 1} IN ${plsqlType(arg.dataType)}`).join(', ');
-  const locals = outs
-    .map((arg, i) => `l${i + 1} ${plsqlType(arg.dataType)};`)
-    .concat(isFunction ? [`l_ret ${plsqlType(returnType)};`] : []);
-  const inits = ins
-    .map((arg, i) => (direction(arg) === 'INOUT' ? `l${outs.indexOf(arg) + 1} := b${i + 1};` : ''))
-    .filter((line) => line !== '');
-  const callArgs = parsed
-    .map((arg) =>
-      direction(arg) === 'IN' ? `b${ins.indexOf(arg) + 1}` : `l${outs.indexOf(arg) + 1}`,
-    )
-    .join(', ');
-  const jsonEntries = outs
-    .map((arg, i) => `${quoteLiteral(arg.name ?? `arg${parsed.indexOf(arg) + 1}`)} VALUE l${i + 1}`)
-    .concat(isFunction ? [`'returnValue' VALUE l_ret`] : [])
-    .join(', ');
-
-  const wrapper =
-    `WITH FUNCTION LU_CALL(${params}) RETURN VARCHAR2 IS\n` +
-    `  ${locals.join('\n  ')}\n` +
-    `BEGIN\n` +
-    (inits.length > 0 ? `  ${inits.join('\n  ')}\n` : '') +
-    `  ${isFunction ? 'l_ret := ' : ''}${qualifiedName}(${callArgs});\n` +
-    `  RETURN JSON_OBJECT(${jsonEntries} RETURNING VARCHAR2);\n` +
-    `END;\n` +
-    `SELECT LU_CALL(${placeholders(ins.length)}) AS "resultado" FROM DUAL`;
-
-  const rows = await dataAccess.queryForList(wrapper, inBinds, { maxRows: 1 });
-  const raw = rows[0]?.resultado;
-  const { returnValue, ...outParams } = JSON.parse(typeof raw === 'string' ? raw : '{}') as {
-    returnValue?: unknown;
-  };
-  return {
-    outParams,
-    returnValue: isFunction ? (returnValue ?? null) : null,
-    cursorResult: null,
-  };
+  return { outParams, returnValue, cursorResult };
 }
 
 function message(error: unknown): string {
@@ -326,7 +323,7 @@ export function registerPlsql(ctx: ServerContext): void {
     'call_procedure',
     {
       description:
-        'Execute a PL/SQL procedure, function or package subprogram with typed arguments. Supports IN/OUT/INOUT scalar parameters and function return values via typed binds (SYS_REFCURSOR OUT/return arguments are not yet supported by the TS driver chokepoint). Pass args as a JSON array: [{"name":"P","direction":"IN","dataType":"NUMBER","value":1}]. PL/SQL BOOLEAN/RECORD/TABLE/VARRAY/OBJECT types are rejected with guidance to create a scalar wrapper. Requires GRANT EXECUTE on the target object. Auto-commits like execute_dml.',
+        'Execute a PL/SQL procedure, function or package subprogram with typed arguments. Supports IN/OUT/INOUT scalar parameters and function return values via typed binds (SYS_REFCURSOR OUT/return arguments are fetched and returned as row arrays). Pass args as a JSON array: [{"name":"P","direction":"IN","dataType":"NUMBER","value":1}]. PL/SQL BOOLEAN/RECORD/TABLE/VARRAY/OBJECT types are rejected with guidance to create a scalar wrapper. Requires GRANT EXECUTE on the target object. Auto-commits like execute_dml.',
       inputSchema: {
         schema: z
           .string()

@@ -1,5 +1,5 @@
 import type { DataAccess, DataAccessCall, QueryOptions } from './data-access.js';
-import type { OracleBind, OracleRow } from './oracle-types.js';
+import type { OracleBind, OracleCallBind, OracleRow } from './oracle-types.js';
 
 export type FakeCall = DataAccessCall;
 
@@ -10,6 +10,8 @@ export type FakeReplyFn = (call: FakeCall) => FakeReply | Error | Promise<FakeRe
 export interface FakeReply {
   rows?: OracleRow[];
   rowCount?: number;
+  /** Fila de OUT binds que responde un `call` (cursores ya serializados). */
+  outRow?: OracleRow;
 }
 
 /**
@@ -41,7 +43,7 @@ export class FakeDataAccess implements DataAccess {
   private async answer(
     method: FakeCall['method'],
     sql: string,
-    binds?: OracleBind[],
+    binds?: OracleBind[] | OracleCallBind[],
     options?: QueryOptions,
   ): Promise<FakeReply> {
     const call: FakeCall = {
@@ -78,8 +80,8 @@ export class FakeDataAccess implements DataAccess {
     return (await this.answer('execute', sql, binds, options)).rowCount ?? 0;
   }
 
-  call(callString: string, binds?: OracleBind[]): Promise<OracleRow[]> {
-    return this.answer('call', callString, binds).then((reply) => reply.rows ?? []);
+  call(callString: string, binds?: OracleCallBind[]): Promise<OracleRow> {
+    return this.answer('call', callString, binds).then((reply) => reply.outRow ?? {});
   }
 
   close(): Promise<void> {

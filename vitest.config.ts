@@ -13,6 +13,8 @@ export default defineConfig({
         test: {
           name: 'integration',
           include: ['test/integration/**/*.test.ts'],
+          // Las suites mutan el mismo esquema de prueba: archivos secuenciales.
+          fileParallelism: false,
         },
       },
     ],

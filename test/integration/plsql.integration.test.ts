@@ -26,6 +26,10 @@ const GOOD_ENV: NodeJS.ProcessEnv = {
 const SCHEMA = GOOD_ENV.ORACLE_DB_USERNAME!;
 const RO_PROC = 'T11_PLSQL_IT_RO';
 const PROBE_EMAIL = 't11-it@lu-query.test';
+const CUR_PROC = 'T11_PLSQL_IT_CUR';
+const CUR_FN = 'T11_PLSQL_IT_FNC';
+const DML_TABLE = 'T11_PLSQL_IT_TAB';
+const DML_PROC = 'T11_PLSQL_IT_DML';
 
 interface ToolResult {
   isError?: boolean;
@@ -47,6 +51,32 @@ describe.skipIf(!optIn)('PL/SQL contra Oracle real', () => {
     await Promise.all([handle.server.connect(serverTransport), client.connect(clientTransport)]);
 
     const db = handle.context.dataAccess;
+    await db.execute(`DROP PROCEDURE ${CUR_PROC}`).catch(() => undefined);
+    await db.execute(
+      `CREATE PROCEDURE ${CUR_PROC} (P_C OUT SYS_REFCURSOR) IS
+       BEGIN
+         OPEN P_C FOR SELECT EMP_ID FROM EMPLOYEES ORDER BY EMP_ID;
+       END;`,
+    );
+    await db.execute(`DROP FUNCTION ${CUR_FN}`).catch(() => undefined);
+    await db.execute(
+      `CREATE FUNCTION ${CUR_FN} RETURN SYS_REFCURSOR IS
+         L_C SYS_REFCURSOR;
+       BEGIN
+         OPEN L_C FOR SELECT EMP_ID FROM EMPLOYEES ORDER BY EMP_ID;
+         RETURN L_C;
+       END;`,
+    );
+    await db.execute(`DROP TABLE ${DML_TABLE}`).catch(() => undefined);
+    await db.execute(`CREATE TABLE ${DML_TABLE} (N NUMBER)`);
+    await db.execute(`DROP PROCEDURE ${DML_PROC}`).catch(() => undefined);
+    await db.execute(
+      `CREATE PROCEDURE ${DML_PROC} (P_ID IN NUMBER, P_N OUT NUMBER) IS
+       BEGIN
+         INSERT INTO ${DML_TABLE} (N) VALUES (P_ID);
+         P_N := SQL%ROWCOUNT;
+       END;`,
+    );
     await db.execute(`DROP PROCEDURE ${RO_PROC}`).catch(() => undefined);
     await db.execute(
       `CREATE PROCEDURE ${RO_PROC} (P_ID IN NUMBER, P_OUT OUT VARCHAR2, P_IO IN OUT NUMBER) IS
@@ -63,6 +93,10 @@ describe.skipIf(!optIn)('PL/SQL contra Oracle real', () => {
     await db
       .execute(`DELETE FROM EMPLOYEES WHERE EMAIL = :1`, [PROBE_EMAIL])
       .catch(() => undefined);
+    await db.execute(`DROP PROCEDURE ${CUR_PROC}`).catch(() => undefined);
+    await db.execute(`DROP FUNCTION ${CUR_FN}`).catch(() => undefined);
+    await db.execute(`DROP TABLE ${DML_TABLE}`).catch(() => undefined);
+    await db.execute(`DROP PROCEDURE ${DML_PROC}`).catch(() => undefined);
     await db.execute(`DROP PROCEDURE ${RO_PROC}`).catch(() => undefined);
     await client.close();
     await handle.close();
@@ -135,7 +169,7 @@ describe.skipIf(!optIn)('PL/SQL contra Oracle real', () => {
     });
   });
 
-  it('call_procedure recupera OUT/INOUT escalares vía el wrapper WITH FUNCTION', async () => {
+  it('call_procedure recupera OUT/INOUT escalares vía binds nativos de salida', async () => {
     const result = await call('call_procedure', {
       schema: SCHEMA,
       name: RO_PROC,
@@ -150,6 +184,51 @@ describe.skipIf(!optIn)('PL/SQL contra Oracle real', () => {
       returnValue: null,
       cursorResult: null,
     });
+  });
+
+  it('REF CURSOR OUT: cursorResult trae las filas fetcheadas', async () => {
+    const result = await call('call_procedure', {
+      schema: SCHEMA,
+      name: CUR_PROC,
+      args: JSON.stringify([{ name: 'P_C', direction: 'OUT', dataType: 'REF CURSOR' }]),
+    });
+    const parsed = JSON.parse(result.content[0]?.text ?? '') as {
+      cursorResult: { EMP_ID: number }[];
+    };
+    expect(Array.isArray(parsed.cursorResult)).toBe(true);
+    expect(parsed.cursorResult.length).toBeGreaterThan(0);
+    expect(parsed.cursorResult[0]).toHaveProperty('EMP_ID');
+  });
+
+  it('función que devuelve REF CURSOR: cursorResult con filas', async () => {
+    const result = await call('call_procedure', {
+      schema: SCHEMA,
+      name: CUR_FN,
+      args: '[]',
+      isFunction: true,
+      returnType: 'REF CURSOR',
+    });
+    const parsed = JSON.parse(result.content[0]?.text ?? '') as { cursorResult: unknown[] };
+    expect(Array.isArray(parsed.cursorResult)).toBe(true);
+    expect(parsed.cursorResult.length).toBeGreaterThan(0);
+  });
+
+  it('OUT con DML: el INSERT persiste y el OUT vuelve (antes ORA-14551)', async () => {
+    const result = await call('call_procedure', {
+      schema: SCHEMA,
+      name: DML_PROC,
+      args: JSON.stringify([
+        { name: 'P_ID', direction: 'IN', dataType: 'NUMBER', value: 42 },
+        { name: 'P_N', direction: 'OUT', dataType: 'NUMBER' },
+      ]),
+    });
+    const parsed = JSON.parse(result.content[0]?.text ?? '') as { outParams: { P_N: number } };
+    expect(parsed.outParams.P_N).toBe(1);
+    const rows = await handle.context.dataAccess.queryForList(
+      'SELECT COUNT(*) AS N FROM ' + DML_TABLE + ' WHERE N = :1',
+      [42],
+    );
+    expect(Number(rows[0]?.N)).toBe(1);
   });
 
   it('un error PL/SQL llega como isError y queda auditado en la sesión', async () => {

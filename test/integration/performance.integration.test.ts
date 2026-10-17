@@ -131,8 +131,14 @@ describe.skipIf(!optIn)('performance — vistas V$ contra Oracle real', () => {
   }, 60_000);
 
   it('el filtro por sid recorta el resultado', async () => {
-    const [session] = await read('list_active_sessions', { username: 'DEVUSER' });
-    const ownSid = session?.SID as number;
+    // shortcut: el SID propio (vivo mientras corre el test), no sessions[0] que
+    // puede ser otra sesión DEVUSER que muera entre llamadas (flake reportado).
+    const ownResult = JSON.parse(
+      await readText('run_query', {
+        sql: "SELECT SYS_CONTEXT('USERENV', 'SID') AS SID FROM DUAL",
+      }),
+    ) as { rows: OracleRow[] };
+    const ownSid = Number(ownResult.rows[0]?.SID);
 
     expect(await read('list_active_sessions', { sid: ownSid })).toHaveLength(1);
     expect(await read('list_active_sessions', { sid: 999_999 })).toHaveLength(0);

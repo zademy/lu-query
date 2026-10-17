@@ -1,5 +1,5 @@
 import { auditStatement, drainAudit } from '../audit/audit-writer.js';
-import type { OracleBind, OracleRow } from './oracle-types.js';
+import type { OracleBind, OracleCallBind, OracleRow } from './oracle-types.js';
 
 /** Opciones comunes de una sentencia. */
 export interface QueryOptions {
@@ -13,7 +13,7 @@ export interface QueryOptions {
 export interface DataAccessCall {
   method: 'queryForList' | 'queryForObject' | 'execute' | 'call';
   sql: string;
-  binds?: OracleBind[];
+  binds?: OracleBind[] | OracleCallBind[];
   options?: QueryOptions;
 }
 
@@ -32,8 +32,8 @@ export interface DataAccess {
   ): Promise<OracleRow | null>;
   /** DML/DDL: devuelve las filas afectadas. */
   execute(sql: string, binds?: OracleBind[], options?: QueryOptions): Promise<number>;
-  /** Llamada a procedimiento/función PL/SQL: devuelve las filas de salida. */
-  call(callString: string, binds?: OracleBind[]): Promise<OracleRow[]>;
+  /** Llamada PL/SQL: devuelve los OUT binds serializados como una fila (cursores → filas). */
+  call(callString: string, binds?: OracleCallBind[]): Promise<OracleRow>;
   /** Libera el pool. Idempotente. */
   close(): Promise<void>;
 }
@@ -71,7 +71,7 @@ export function withAudit(inner: DataAccess): DataAccess {
       return auditStatement(
         `BEGIN ${callString}; END;`,
         () => inner.call(callString, binds),
-        (rows) => rows.length,
+        (row) => Object.keys(row).length,
       );
     },
     async close() {
