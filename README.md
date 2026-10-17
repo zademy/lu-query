@@ -1,7 +1,7 @@
-![lu-query](docs/banner.png)
+![lu-query](https://raw.githubusercontent.com/zademy/lu-query/master/docs/banner.png)
 
 [![npm](https://img.shields.io/npm/v/lu-query?style=flat-square&label=npm)](https://www.npmjs.com/package/lu-query)
-[![license](https://img.shields.io/npm/l/lu-query?style=flat-square&label=license)](https://github.com/zademy/lu-query/blob/master/LICENSE)
+[![license](https://img.shields.io/npm/l/lu-query?style=flat-square&label=license&cacheSeconds=600)](https://github.com/zademy/lu-query/blob/master/LICENSE)
 [![node](https://img.shields.io/badge/node-%E2%89%A522-informational?style=flat-square)](https://nodejs.org)
 
 [![lu-query promo](https://github.com/user-attachments/assets/9740a811-cd16-4a68-967f-7792a60d1b04)](https://github.com/user-attachments/assets/9740a811-cd16-4a68-967f-7792a60d1b04)
@@ -37,6 +37,69 @@ Client configuration (Claude Desktop example; any MCP client works):
   }
 }
 ```
+
+### With OpenCode
+
+**1. Install once.** The package ships the `lu-query` binary, so a single global install gives you the command forever:
+
+```bash
+npm i -g lu-query
+```
+
+**2. Export the Oracle credentials** in the environment that launches OpenCode (your shell profile is fine). They never need to live in the config file.
+
+**3. Register the server** in `opencode.json` (global, in `~/.config/opencode/`) or in `.opencode/` for a single project:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "lu-query": {
+        "type": "local",
+        "command": ["lu-query"],
+        "environment": {
+          "ORACLE_DB_URL": "{env:ORACLE_DB_URL}",
+          "ORACLE_DB_USERNAME": "{env:ORACLE_DB_USERNAME}",
+          "ORACLE_DB_PASSWORD": "{env:ORACLE_DB_PASSWORD}",
+          "MCP_AUDIT_DIR": "/home/you/.lu-query/audit"
+        }
+      }
+    }
+  }
+}
+```
+
+**4. Verify:** `opencode mcp list` → `✓ lu-query connected`. The nine MCP prompts become commands like `/lu-query:review-sql-performance`.
+
+Notes:
+
+- `{env:NAME}` is OpenCode's substitution syntax for reading a variable from the environment; shell forms like `$NAME` are **not** expanded inside JSON. Keep the password in the environment, not in the file.
+- Pin `MCP_AUDIT_DIR` to an absolute path like above. Without it the audit Markdown lands in `./mcp-audit-logs` relative to the process working directory, which is your project — audit files would show up in the repo. Set `MCP_AUDIT_ENABLED=false` to turn auditing off.
+- npm may warn that install scripts for `oracledb` were blocked. It is harmless: lu-query runs node-oracledb in thin mode and needs no native client.
+- No `ORACLE_DB_SCHEMA`? Every tool uses the connected user's schema; set it to pin one.
+- The pool is lazy: the server answers `initialize` without a database; the credentials are only needed when a tool actually queries.
+
+Prefer no global install? Use `"command": ["npx", "-y", "lu-query"]` instead: same behavior, npx downloads and caches the package on the first call — and that first call can exceed the 30 s default startup timeout, so add `"timeout": { "startup": 120000 }`.
+
+### From a local clone
+
+While working on the code (or on an unpublished build), point the command at your local build instead of the installed one:
+
+```json
+"lu-query": {
+  "type": "local",
+  "command": ["node", "/absolute/path/to/lu-query/dist/index.js"],
+  "cwd": "/absolute/path/to/lu-query",
+  "environment": {
+    "ORACLE_DB_URL": "{env:ORACLE_DB_URL}",
+    "ORACLE_DB_USERNAME": "{env:ORACLE_DB_USERNAME}",
+    "ORACLE_DB_PASSWORD": "{env:ORACLE_DB_PASSWORD}"
+  }
+}
+```
+
+Run `npm run build` first: `dist/` is generated and gitignored.
 
 The pool is lazy: the server starts and answers `initialize` without a database; the first tool call opens the connection.
 
