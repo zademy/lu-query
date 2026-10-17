@@ -1,4 +1,5 @@
 import { assertNodeVersion, loadConfig } from './config.js';
+import { createSentrySink, flushSentry, type SentrySink } from './observability/sentry.js';
 import { startStdioServer } from './server.js';
 
 // Guard de runtime: `engines` de npm no cubre ejecutar dist/index.js directo.
@@ -10,17 +11,24 @@ try {
 }
 
 // stdout queda reservado al JSON-RPC del server MCP; los logs van a stderr.
+let sink: SentrySink | undefined;
 try {
   const config = loadConfig();
+  sink = createSentrySink(config);
   const handle = await startStdioServer(config);
   process.stderr.write(`lu-query ${config.serverVersion} escuchando MCP sobre stdio\n`);
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.once(signal, () => {
-      void handle.close().finally(() => process.exit(0));
+      void handle
+        .close()
+        .then(() => flushSentry())
+        .finally(() => process.exit(0));
     });
   }
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`lu-query no pudo arrancar: ${message}\n`);
+  sink?.captureException(error);
+  await flushSentry();
   process.exit(1);
 }
