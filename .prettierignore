@@ -4,6 +4,9 @@ node_modules/
 mcp-audit-logs/
 skills-lock.json
 package-lock.json
+# Proyecto de video (Remotion) con su propio tooling.
+video/
+
 # Documentación y skills del repo, fuera del ownership de este paquete.
 .agents/
 docs/
