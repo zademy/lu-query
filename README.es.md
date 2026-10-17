@@ -4,11 +4,6 @@
 [![license](https://img.shields.io/npm/l/lu-query?style=flat-square&label=license)](https://github.com/zademy/lu-query/blob/master/LICENSE)
 [![node](https://img.shields.io/badge/node-%E2%89%A522-informational?style=flat-square)](https://nodejs.org)
 
-## Ver el video promocional
-
-**[▶ Ver el promo de 33 segundos (MP4, 1080p30)](https://github.com/zademy/lu-query/raw/master/docs/lu-query-promo.mp4)** - 75 tools, modo thin sin instalar y auditoria Markdown, en 33 segundos.
-[Descargar el archivo](https://github.com/zademy/lu-query/blob/master/docs/lu-query-promo.mp4) | [Codigo fuente (Remotion)](https://github.com/zademy/lu-query/tree/develop/video)
-
 Servidor MCP que expone una base de datos Oracle a clientes MCP por **stdio**: 75 tools para consultar, modificar, inspeccionar y diagnosticar la base, en modo thin sin instalar nada y con auditoría Markdown de cada sentencia.
 
 ## Requisitos

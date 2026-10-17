@@ -4,11 +4,6 @@
 [![license](https://img.shields.io/npm/l/lu-query?style=flat-square&label=license)](https://github.com/zademy/lu-query/blob/master/LICENSE)
 [![node](https://img.shields.io/badge/node-%E2%89%A522-informational?style=flat-square)](https://nodejs.org)
 
-## Watch the promo
-
-**[▶ Watch the 33-second promo (MP4, 1080p30)](https://github.com/zademy/lu-query/raw/master/docs/lu-query-promo.mp4)** - 75 tools, zero-install thin mode and a Markdown audit, in 33 seconds.
-[Download the file](https://github.com/zademy/lu-query/blob/master/docs/lu-query-promo.mp4) | [Remotion source](https://github.com/zademy/lu-query/tree/develop/video)
-
 MCP server that exposes an Oracle database to MCP clients over **stdio** - 75 tools for querying, changing, inspecting and triaging it, with zero-install thin mode and a Markdown audit of every statement.
 
 ## Requirements
