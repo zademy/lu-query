@@ -21,6 +21,8 @@ function initToolRequestHandlers(server: McpServer): void {
 export interface ServerContext {
   server: McpServer;
   dataAccess: DataAccess;
+  /** Schema de la sesión, resuelto al arrancar si no hay ORACLE_DB_SCHEMA. */
+  sessionSchema?: string;
   config: ResolvedConfig;
 }
 

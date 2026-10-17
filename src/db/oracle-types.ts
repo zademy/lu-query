@@ -26,6 +26,8 @@ export interface OracleConnection {
   /** Cancela la sentencia en curso en el servidor (el ORA-01013 del Java). */
   breakExecution(): Promise<void>;
   close(): Promise<void>;
+  /** Commit explícito: en thin `autoCommit` no persiste el DML. */
+  commit(): Promise<void>;
 }
 
 export interface OraclePool {
@@ -51,9 +53,15 @@ export interface OraclePoolAttributes {
   connectTimeout: number;
   poolAlias: string;
   sessionCallback?: OracleSessionCallback;
+  /**
+   * Columnas que se traen como string en vez de Lob/Readable; sin esto el
+   * thin corta los DDL de DBMS_METADATA a 4000 caracteres.
+   */
+  fetchAsString?: unknown[];
 }
 
 export interface OracleModule {
+  CLOB: unknown;
   OUT_FORMAT_OBJECT: number;
   createPool(attributes: OraclePoolAttributes): Promise<OraclePool>;
 }

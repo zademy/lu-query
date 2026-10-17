@@ -1,3 +1,14 @@
+import type { ServerContext } from '../server.js';
+
+/**
+ * Schema de respaldo para las tools: el configurado (ORACLE_DB_SCHEMA) o, si
+ * no hay, el schema de la sesión (`SYS_CONTEXT`), que es lo que hace el
+ * `SchemaCatalog.currentSchema()` del Java.
+ */
+export function schemaFallback(ctx: ServerContext): string | undefined {
+  return ctx.config.schema ?? ctx.sessionSchema;
+}
+
 import { ConfigError } from '../errors.js';
 
 /**

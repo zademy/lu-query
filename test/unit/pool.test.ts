@@ -32,6 +32,7 @@ function fakeBackend(reply: (executed: Executed) => OracleResult<OracleRow> | un
   const state = { breaks: 0, closed: false, callTimeout: 0 };
 
   const connection: OracleConnection = {
+    commit: () => Promise.resolve(),
     async execute<Row = OracleRow>(
       sql: string,
       binds?: OracleBind[],

@@ -2,7 +2,7 @@ import { Readable } from 'node:stream';
 import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { withToolContext } from '../audit/context.js';
-import { resolveSchema } from '../catalog/schema.js';
+import { resolveSchema, schemaFallback } from '../catalog/schema.js';
 import type { DataAccess } from '../db/data-access.js';
 import type { OracleBind, OracleRow } from '../db/oracle-types.js';
 import { guardTool } from '../errors.js';
@@ -347,7 +347,7 @@ export function registerMetadataCore(ctx: ServerContext): void {
               text: JSON.stringify(
                 await describeTable(
                   dataAccess,
-                  resolveSchema(args.schema, ctx.config.schema, 'describe_table'),
+                  resolveSchema(args.schema, schemaFallback(ctx), 'describe_table'),
                   assertIdentifier(args.table, 'tabla'),
                 ),
               ),
@@ -381,7 +381,7 @@ export function registerMetadataCore(ctx: ServerContext): void {
               text: JSON.stringify(
                 await tableExists(
                   dataAccess,
-                  resolveSchema(args.schema, ctx.config.schema, 'table_exists'),
+                  resolveSchema(args.schema, schemaFallback(ctx), 'table_exists'),
                   assertIdentifier(args.table, 'tabla'),
                 ),
               ),
@@ -483,7 +483,7 @@ export function registerMetadataCore(ctx: ServerContext): void {
               text: JSON.stringify(
                 await getDdl(
                   dataAccess,
-                  resolveSchema(args.schema, ctx.config.schema, 'get_ddl'),
+                  resolveSchema(args.schema, schemaFallback(ctx), 'get_ddl'),
                   assertIdentifier(args.name, 'nombre'),
                   assertIdentifier(args.type, 'tipo'),
                 ),

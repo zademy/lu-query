@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { withToolContext } from '../audit/context.js';
-import { resolveSchema } from '../catalog/schema.js';
+import { resolveSchema, schemaFallback } from '../catalog/schema.js';
 import { guardTool, SecurityError } from '../errors.js';
 import { qualifiedName, quoteCsv, quoteIdentifier, quoteLiteral } from '../security/identifiers.js';
 import type { ServerContext } from '../server.js';
@@ -27,7 +27,7 @@ function optionalSchema(owner: string) {
 
 /** Schema efectivo: el pedido gana; si no, el configurado (o error si no hay). */
 function owner(ctx: ServerContext, requested: string | undefined, tool: string): string {
-  return resolveSchema(requested, ctx.config.schema, tool);
+  return resolveSchema(requested, schemaFallback(ctx), tool);
 }
 
 function text(value: string): { type: 'text'; text: string } {
