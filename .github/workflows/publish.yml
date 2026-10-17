@@ -1,0 +1,36 @@
+name: publish
+
+# Se dispara con el push a master y no con el evento de release: la release la crea
+# release.yml usando GITHUB_TOKEN, y GitHub no ejecuta workflows por eventos generados
+# con su propio token. El push si lo dispara el merge, asi que este workflow corre.
+on:
+  push:
+    branches: [master]
+
+permissions:
+  id-token: write # OIDC: npm no pide token ni codigo OTP
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest # npm solo acepta OIDC de runners alojados por GitHub
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24' # npm exige Node >= 22.14.0 y CLI >= 11.5.1 para OIDC
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Dependencias
+        run: npm ci
+
+      - name: Publicar en npm con trusted publishing
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "lu-query@$VERSION" version > /dev/null 2>&1; then
+            echo "::notice::$VERSION ya esta en npm; nada que publicar."
+            exit 0
+          fi
+          npm publish # prepublishOnly ya compila dist/
