@@ -1,3 +1,5 @@
+import { TIMEOUTS } from './config.js';
+
 /**
  * Errores del dominio. Toda excepción que cruza una tool se convierte en un
  * resultado MCP `isError` (contrato del Java: nunca rompen el transporte).
@@ -133,10 +135,27 @@ export function asToolError(error: unknown): ToolErrorResult {
  */
 export async function guardTool<T extends ToolTextResult>(
   run: () => Promise<T>,
+  timeoutMs: number = TIMEOUTS.requestMs,
 ): Promise<T | ToolErrorResult> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await run();
+    return await Promise.race([
+      run(),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new DataAccessError(
+                `La tool excedió el timeout de request MCP (${timeoutMs} ms); el statement se cancela antes por el timeout de ${TIMEOUTS.statementMs} ms.`,
+              ),
+            ),
+          timeoutMs,
+        );
+      }),
+    ]);
   } catch (error) {
     return asToolError(error);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
