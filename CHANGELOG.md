@@ -6,7 +6,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.1.0/). El n
 
 ### Cambios internos
 
-- **Publicacion automatica a npm con trusted publishing (OIDC)**: `.github/workflows/publish.yml` corre al publicar una release y hace `npm publish` sin token ni codigo OTP. Resuelve el error de 2FA en el pipeline: con una cuenta que tiene 2FA, `npm publish` pide un codigo de un solo uso que un runner no puede responder; en su lugar npm verifica la identidad del workflow con un token corto firmado por GitHub (`id-token: write`). Requisitos de npm: Node >= 22.14.0 (CLI >= 11.5.1) y runners alojados por GitHub. Primera publicacion hecha por GitHub Actions con el Trusted Publisher de OIDC, sin token ni codigo OTP. La 2.16.1 se versiono pero no llego a npm.
+- **Publicacion automatica a npm con trusted publishing (OIDC)**: `.github/workflows/release.yml` publica en npm en el mismo run que crea la release, con `npm publish` y sin token ni codigo OTP. Va dentro del mismo workflow a proposito: GitHub no ejecuta workflows disparados por eventos creados con su propio `GITHUB_TOKEN`, asi que un workflow aparte con `on: release` nunca se habria ejecutado. El paso es idempotente: si esa version ya esta en npm, avisa y no publica. Resuelve el error de 2FA en el pipeline: con una cuenta que tiene 2FA, `npm publish` pide un codigo de un solo uso que un runner no puede responder; en su lugar npm verifica la identidad del workflow con un token corto firmado por GitHub (`id-token: write`). Requisitos de npm: Node >= 22.14.0 (CLI >= 11.5.1) y runners alojados por GitHub. Primera publicacion hecha por GitHub Actions con el Trusted Publisher de OIDC, sin token ni codigo OTP. La 2.16.1 se versiono pero no llego a npm.
 
 ## [2.16.0] - 2026-10-17
 
