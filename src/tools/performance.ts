@@ -7,12 +7,12 @@ import type { ServerContext } from '../server.js';
 
 /**
  * Diagnóstico de performance sobre las vistas V$ de Oracle. Réplica 1:1 del
- * `PerformanceTools`/`PerformanceService` del Java: mismas tools, mismos
- * parámetros y mismas columnas. Solo lee; el usuario de la BD es quien decide
- * qué ve (v. `scripts/test-grants-performance.sql`).
+ * `PerformanceTools`/`PerformanceService` del Java 2.13.0: mismas tools,
+ * descripciones, parámetros, SQL y alias de columna. Solo lee; quién ve las
+ * vistas lo decide el grant del usuario de BD (v. scripts/test-grants-performance.sql).
  */
 
-/** Filas por defecto de `list_top_sql`, como el `limit` por defecto del Java. */
+/** Filas por defecto de `list_top_sql`, como el `limit == null ? 10` del Java. */
 const DEFAULT_TOP_SQL = 10;
 
 /** Lo que Oracle responde cuando al usuario le faltan privilegios de catálogo. */
@@ -27,50 +27,50 @@ const ACTIVE_SESSIONS_SQL = `SELECT sid, serial# AS serial_num, username, machin
        last_call_et AS seconds_since_last_call, module, action, client_info
 FROM v$session
 WHERE status = 'ACTIVE'
-AND (:1 IS NULL OR username = :1)
-AND (:2 IS NULL OR sid = :2)
+AND (:username IS NULL OR username = :username)
+AND (:sid IS NULL OR sid = :sid)
 ORDER BY sid`;
 
-const BLOCKED_SESSIONS_SQL = `SELECT s.sid AS waiting_sid, s.serial# AS waiting_serial,
-       s.username AS waiting_user, s.status AS waiting_status,
-       s.seconds_in_wait AS waiting_seconds,
-       s.blocking_session AS blocking_sid,
-       bs.serial# AS blocking_serial,
-       bs.username AS blocking_user,
-       s.sql_id, s.prev_sql_id, s.event AS wait_event, s.seconds_in_wait
+const BLOCKED_SESSIONS_SQL = `SELECT s.sid, s.serial# AS serial_num, s.username, s.machine, s.program,
+       s.status, s.blocking_session AS blocker_sid,
+       bs.username AS blocker_username, bs.program AS blocker_program,
+       s.event AS wait_event, s.seconds_in_wait
 FROM v$session s
 LEFT JOIN v$session bs ON bs.sid = s.blocking_session
 WHERE s.blocking_session IS NOT NULL
 ORDER BY s.sid`;
 
-// El objeto se localiza por (id1, id2), que es como V$LOCK guarda type/id1/id2.
-const LOCKS_SQL = `SELECT s.sid, s.serial#, s.username, s.status AS session_status,
-       s.machine, s.program, o.object_name, o.object_type, o.owner,
-       l.type AS lock_type, l.lmode, l.request, l.block AS blocking_lock_sid,
-       l.ctime
-FROM v$session s
-JOIN v$lock l ON s.sid = l.sid
-LEFT JOIN dba_objects o ON o.object_id = l.id1 AND o.data_object_id = l.id2
-ORDER BY s.sid, l.ctime DESC`;
+const LOCKS_SQL = `SELECT s.sid, s.serial# AS serial_num, s.username, s.machine,
+       lo.oracle_username AS locked_user, o.owner AS object_owner,
+       o.object_name, o.object_type,
+       DECODE(l.type,
+              'TM','DML','TX','Transaction','UL','User','MR','Media Recovery',
+              'ST','Disk Space','CU','Cursor Bind','JX','Task Execution',
+              l.type) AS lock_type,
+       DECODE(l.lmode,0,'None',1,'Null',2,'Row Share',3,'Row Exclusive',
+              4,'Share',5,'Share Row Exclusive',6,'Exclusive',TO_CHAR(l.lmode)) AS held_mode,
+       DECODE(l.request,0,'None',1,'Null',2,'Row Share',3,'Row Exclusive',
+              4,'Share',5,'Share Row Exclusive',6,'Exclusive',TO_CHAR(l.request)) AS requested_mode,
+       l.ctime AS seconds_held
+FROM v$lock l
+JOIN v$session s ON s.sid = l.sid
+LEFT JOIN v$locked_object lo ON lo.session_id = s.sid
+LEFT JOIN all_objects o ON o.object_id = lo.object_id
+WHERE l.type IN ('TM','TX','UL','MR','ST','CU','JX')
+AND (l.lmode > 0 OR l.request > 0)
+ORDER BY l.sid, l.type`;
 
-// SQL_ID vive en V$SESSION mientras la sentencia corre; V$SQL ya no tiene sid/serial#.
-// Cada fila es una pieza de 64 caracteres, de ahí el join por "\n" del Java.
 const SESSION_SQL_TEXT_SQL = `SELECT sql_text
 FROM v$sqltext_with_newlines
-WHERE sql_id = (SELECT sql_id FROM v$session WHERE sid = :1 AND serial# = :2 AND sql_id IS NOT NULL)
+WHERE address = (SELECT sql_address FROM v$session WHERE sid = :sid AND serial# = :serial)
+AND hash_value = (SELECT sql_hash_value FROM v$session WHERE sid = :sid AND serial# = :serial)
 ORDER BY piece`;
-
-const TOP_SQL_SQL = `SELECT sql_id, child_number, plan_hash_value, executions, elapsed_time, cpu_time, buffer_gets, disk_reads, optimizer_cost, sql_text
-FROM v$sql
-WHERE sql_text IS NOT NULL
-ORDER BY NVL(:1, 'elapsed_time') DESC
-FETCH FIRST :2 ROWS ONLY`;
 
 const WAIT_EVENTS_SQL = `SELECT sid, seq#, event, p1text, p1, p2text, p2, p3text, p3,
        wait_class, wait_time, seconds_in_wait, state
 FROM v$session_wait
-WHERE (:1 IS NULL OR sid = :1)
-AND (:2 IS NULL OR wait_class = :2)
+WHERE (:sid IS NULL OR sid = :sid)
+AND (:waitClass IS NULL OR wait_class = :waitClass)
 ORDER BY sid`;
 
 const LONGOPS_SQL = `SELECT sid, serial# AS serial_num, opname, target,
@@ -78,23 +78,34 @@ const LONGOPS_SQL = `SELECT sid, serial# AS serial_num, opname, target,
        start_time, last_update_time, time_remaining AS seconds_remaining, elapsed_seconds,
        message, username
 FROM v$session_longops
-WHERE (:1 IS NULL OR sid = :1)
+WHERE (:sid IS NULL OR sid = :sid)
 AND sofar < totalwork
 ORDER BY start_time DESC`;
 
-const INSTANCE_INFO_SQL = `SELECT instance_name, host_name, version, startup_time, status, archiver, thread# AS thread
-FROM v$instance WHERE ROWNUM = 1`;
+const INSTANCE_INFO_SQL = `SELECT instance_name, host_name, version, startup_time, status,
+       parallel, thread# AS thread, archiver, logins, shutdown_pending, database_status
+FROM v$instance`;
 
-const DATABASE_INFO_SQL = `SELECT name, created, log_mode, open_mode, database_role, flashback_on AS flashback_status
-FROM v$database WHERE ROWNUM = 1`;
+const DATABASE_INFO_SQL = `SELECT name, created, log_mode, open_mode, dbid,
+       platform_id, platform_name, database_role AS role, force_logging, flashback_on
+FROM v$database`;
 
-const SYSTEM_STATS_SQL = `SELECT name, value FROM v$sysstat ORDER BY name`;
+const SYSTEM_STATS_SQL = `SELECT statistic# AS stat_id, name, class, value
+FROM v$sysstat
+WHERE class IN (1, 2, 4, 8, 16, 32, 64, 128)
+ORDER BY class, name`;
 
-const DB_TIME_MODEL_SQL = `SELECT stat_name, value FROM v$sys_time_model ORDER BY stat_name`;
+const DB_TIME_MODEL_SQL = `SELECT stat_id, stat_name AS name, value
+FROM v$sys_time_model
+ORDER BY stat_name`;
 
-// Los nombres de V$PARAMETER van en minúsculas; el patrón llega en mayúsculas.
-const PARAMETER_SQL = `SELECT name, value, type, description, isdefault, ismodified, isses_modifiable, issys_modifiable
-FROM v$parameter WHERE UPPER(name) LIKE :1 ESCAPE '\\' ORDER BY name`;
+const PARAMETER_SQL = `SELECT name, type, value, display_value, description,
+       isses_modifiable AS session_modifiable,
+       issys_modifiable AS system_modifiable,
+       isdefault, ismodified
+FROM v$parameter
+WHERE UPPER(name) LIKE UPPER(:name) ESCAPE '\\'
+ORDER BY name`;
 
 const DATAFILE_IO_SQL = `SELECT d.file# AS file_id, d.name AS file_name, d.status, d.enabled,
        d.bytes / 1024 / 1024 AS size_mb,
@@ -106,7 +117,34 @@ FROM v$datafile d
 LEFT JOIN v$filestat fs ON fs.file# = d.file#
 ORDER BY d.file#`;
 
-/** Filtro opcional de patrón LIKE, con la convención de `LikePatterns` del Java. */
+/** Alias de cliente → columna ordenable de V$SQL, el switch `safe` del Java. */
+const SORTABLE_COLUMNS: Record<string, string> = {
+  disk_reads: 'disk_reads',
+  disk: 'disk_reads',
+  elapsed: 'elapsed_time',
+  elapsed_time: 'elapsed_time',
+  executions: 'executions',
+  exec: 'executions',
+  cpu_time: 'cpu_time',
+  cpu: 'cpu_time',
+};
+
+/** Top SQL: la columna de ORDER BY sale de la allow-list, nunca del cliente. */
+function topSqlSql(orderBy: string | undefined): string {
+  const column =
+    (orderBy === undefined ? undefined : SORTABLE_COLUMNS[orderBy.toLowerCase()]) ?? 'buffer_gets';
+  return `SELECT sql_id, child_number AS child, parsing_schema_name AS parsed_by,
+       executions, buffer_gets, disk_reads, rows_processed,
+       elapsed_time / 1000 AS elapsed_ms, cpu_time / 1000 AS cpu_ms,
+       elapsed_time / NULLIF(executions, 0) / 1000 AS avg_elapsed_ms,
+       SUBSTR(sql_text, 1, 200) AS sql_preview
+FROM v$sql
+WHERE executions > 0
+ORDER BY ${column} DESC
+FETCH FIRST :limit ROWS ONLY`;
+}
+
+/** Substring del cliente → patrón LIKE de Oracle (`LikePatterns` del Java). */
 function likePattern(name?: string): string {
   const pattern = name?.trim() ?? '';
   if (pattern === '') return '%';
@@ -152,34 +190,37 @@ export async function listActiveSessions(
   return vRows(dataAccess, ACTIVE_SESSIONS_SQL, [username, username, sid, sid]);
 }
 
-/** Sesiones bloqueadas por otra sesión, con los datos de quien bloquea. */
+/** Sesiones bloqueadas, con quién bloquea y el evento de espera. */
 export async function listBlockedSessions(dataAccess: DataAccess): Promise<OracleRow[]> {
   return vRows(dataAccess, BLOCKED_SESSIONS_SQL);
 }
 
-/** Locks de todas las sesiones, con el objeto bloqueado cuando se puede resolver. */
+/** Locks DML/transacción/usuario con el objeto y los modos decodificados. */
 export async function listLocks(dataAccess: DataAccess): Promise<OracleRow[]> {
   return vRows(dataAccess, LOCKS_SQL);
 }
 
-/** SQL en curso de una sesión, como el string que devolvía el Java. */
+/** SQL en curso de una sesión: las piezas concatenadas, como el String del Java. */
 export async function getSessionSqlText(
   dataAccess: DataAccess,
   args: { sid: number; serialNum: number },
 ): Promise<string> {
-  const rows = await vRows(dataAccess, SESSION_SQL_TEXT_SQL, [args.sid, args.serialNum]);
-  return rows.map((row) => (typeof row.SQL_TEXT === 'string' ? row.SQL_TEXT : '')).join('\n');
+  const rows = await vRows(dataAccess, SESSION_SQL_TEXT_SQL, [
+    args.sid,
+    args.serialNum,
+    args.sid,
+    args.serialNum,
+  ]);
+  // Java: StringBuilder.append pieza a pieza; SQL_TEXT es VARCHAR2 (string).
+  return rows.map((row) => (typeof row.SQL_TEXT === 'string' ? row.SQL_TEXT : '')).join('');
 }
 
-/** Top SQL por elapsed_time (por defecto) o buffer_gets. */
+/** Top SQL por buffer_gets (default), disk_reads, elapsed_time, executions o cpu_time. */
 export async function listTopSql(
   dataAccess: DataAccess,
   args: { orderBy?: string; limit?: number },
 ): Promise<OracleRow[]> {
-  return vRows(dataAccess, TOP_SQL_SQL, [
-    args.orderBy ?? 'elapsed_time',
-    args.limit ?? DEFAULT_TOP_SQL,
-  ]);
+  return vRows(dataAccess, topSqlSql(args.orderBy), [args.limit ?? DEFAULT_TOP_SQL]);
 }
 
 /** Wait events por sesión, con filtro opcional de sid y clase de espera. */
@@ -211,7 +252,7 @@ export async function getDatabaseInfo(dataAccess: DataAccess): Promise<OracleRow
   return vRow(dataAccess, DATABASE_INFO_SQL);
 }
 
-/** Estadísticas acumuladas de V$SYSSTAT. */
+/** Estadísticas acumuladas de V$SYSSTAT (clases 1-128, como el Java). */
 export async function getSystemStats(dataAccess: DataAccess): Promise<OracleRow[]> {
   return vRows(dataAccess, SYSTEM_STATS_SQL);
 }
@@ -235,8 +276,9 @@ export async function listDatafileIo(dataAccess: DataAccess): Promise<OracleRow[
 }
 
 /**
- * Registra una tool de performance: contexto de auditoría, guard y JSON del
- * resultado. `run` se pasa por referencia (su firma es la que tipa los args).
+ * Registra una tool de performance: contexto de auditoría, guard y resultado.
+ * Un `string` (el SQL de una sesión) viaja como texto plano porque así lo
+ * devuelve el Java; el resto, como JSON.
  */
 function vTool<Args extends Record<string, unknown> = Record<string, unknown>>(
   ctx: ServerContext,
@@ -248,16 +290,17 @@ function vTool<Args extends Record<string, unknown> = Record<string, unknown>>(
   ctx.server.registerTool(name, { description, inputSchema: shape }, async (args) =>
     // El contexto de auditoría viaja por AsyncLocalStorage hasta el DataAccess.
     withToolContext(name, args, () =>
-      guardTool(async () => ({
-        content: [
-          {
-            type: 'text' as const,
-            // El SDK entrega los args ya validados por el shape de arriba; el
-            // tipo genérico solo sirve para que `run` los reciba tipados.
-            text: JSON.stringify(await run(ctx.dataAccess, args as Args)),
-          },
-        ],
-      })),
+      guardTool(async () => {
+        const result = await run(ctx.dataAccess, args as Args);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: typeof result === 'string' ? result : JSON.stringify(result),
+            },
+          ],
+        };
+      }),
     ),
   );
 }
@@ -266,7 +309,7 @@ const SID_FILTER = {
   sid: z.number().int().describe('Optional session id (SID) filter.').optional(),
 };
 
-/** Performance — diagnóstico en vivo sobre las vistas V$ (13 tools). */
+/** Performance — diagnóstico en vivo sobre las vistas V$ (13 tools del Java). */
 export function registerPerformance(ctx: ServerContext): void {
   vTool(
     ctx,
@@ -282,7 +325,7 @@ export function registerPerformance(ctx: ServerContext): void {
   vTool(
     ctx,
     'list_blocked_sessions',
-    "List sessions currently blocked by another session (blocking_session is not null), with the blocker session's sid, serial and username.",
+    'List sessions currently blocked by another session, with the blocker sid/username/program and the wait event being waited on.',
     {},
     listBlockedSessions,
   );
@@ -290,7 +333,7 @@ export function registerPerformance(ctx: ServerContext): void {
   vTool(
     ctx,
     'list_locks',
-    'List lock information for all sessions: sid, username, object name/type, lock type, mode, request and blocking session.',
+    'List DML/transaction/user locks held and requested, with the locked object name and lock mode (decoded).',
     {},
     listLocks,
   );
@@ -298,13 +341,10 @@ export function registerPerformance(ctx: ServerContext): void {
   vTool(
     ctx,
     'get_session_sql_text',
-    'Return the SQL text (sqltext_with_newlines) of the SQL currently executing in a given session. Requires sid and serialNum from list_active_sessions.',
+    'Return the full SQL text currently being executed by a session, given its sid and serial#.',
     {
-      sid: z.number().int().describe('Session id (SID) whose SQL text you want.'),
-      serialNum: z
-        .number()
-        .int()
-        .describe('Serial number of the session; use the serial from list_active_sessions.'),
+      sid: z.number().int().describe('Session id (SID).'),
+      serialNum: z.number().int().describe('Session serial number.'),
     },
     getSessionSqlText,
   );
@@ -312,17 +352,15 @@ export function registerPerformance(ctx: ServerContext): void {
   vTool(
     ctx,
     'list_top_sql',
-    'List the top SQL statements from v$sql ordered by elapsed_time or buffer_gets. Optional orderBy (default elapsed_time) and limit (default 10). Use run_query for anything else.',
+    "Top-N SQL statements ordered by buffer_gets (default), disk_reads, elapsed_time, executions or cpu_time. Returns sql_id, executions, gets/reads/elapsed and a 200-char SQL preview.",
     {
       orderBy: z
         .string()
-        .describe("Column to order by: 'elapsed_time' (default) or 'buffer_gets'.")
+        .describe(
+          "Sort key: 'buffer_gets' (default), 'disk_reads', 'elapsed_time', 'executions', 'cpu_time'.",
+        )
         .optional(),
-      limit: z
-        .number()
-        .int()
-        .describe('Maximum number of SQL statements to return. Defaults to 10.')
-        .optional(),
+      limit: z.number().int().describe('Number of rows to return (default 10).').optional(),
     },
     listTopSql,
   );
@@ -330,14 +368,12 @@ export function registerPerformance(ctx: ServerContext): void {
   vTool(
     ctx,
     'get_wait_events',
-    'List current wait events per session from v$session_wait with event name, p1/p2/p3, wait class and time in wait. Optional sid and waitClass filters.',
+    "List current wait events from V$SESSION_WAIT. Optional sid filter and wait_class filter (e.g. 'Application','Concurrency','User I/O').",
     {
       ...SID_FILTER,
       waitClass: z
         .string()
-        .describe(
-          "Optional wait class filter (e.g. 'User I/O', 'Concurrency'). Omit to list all classes.",
-        )
+        .describe("Optional wait class filter (e.g. 'User I/O', 'Application').")
         .optional(),
     },
     getWaitEvents,
@@ -346,7 +382,7 @@ export function registerPerformance(ctx: ServerContext): void {
   vTool(
     ctx,
     'get_session_longops',
-    'List long-running operations currently tracked in v$session_longops (only in progress, sofar < totalwork). Optional sid filter.',
+    'List long-running operations from V$SESSION_LONGOPS (backups, stats gathering, long queries) with progress percentage and ETA. Optional sid filter; only in-progress ops shown.',
     SID_FILTER,
     getSessionLongops,
   );

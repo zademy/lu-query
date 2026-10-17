@@ -215,23 +215,23 @@ describe.skipIf(!optIn)('performance — sesión bloqueada', () => {
     const blocked = await waitFor(async () => {
       const result = await oracle.call('list_blocked_sessions');
       const rows = JSON.parse(result.content[0]?.text ?? '[]') as OracleRow[];
-      return rows.filter((row) => row.WAITING_USER === GOOD_ENV.ORACLE_DB_USERNAME);
+      return rows.filter((row) => row.USERNAME === GOOD_ENV.ORACLE_DB_USERNAME);
     });
     const waiting = blocked[0];
 
     expect(waiting).toBeDefined();
-    expect(waiting?.BLOCKING_SID).toBeGreaterThan(0);
+    expect(waiting?.BLOCKER_SID).toBeGreaterThan(0);
 
+    // El SQL en curso llega como texto plano (String del Java), no como JSON.
     const sqlText = await oracle.call('get_session_sql_text', {
-      sid: waiting?.WAITING_SID,
-      serialNum: waiting?.WAITING_SERIAL,
+      sid: waiting?.SID,
+      serialNum: waiting?.SERIAL_NUM,
     });
     expect(sqlText.isError).toBeFalsy();
-    expect(JSON.parse(sqlText.content[0]?.text ?? '')).toContain('lu-query-t14');
+    expect(sqlText.content[0]?.text ?? '').toContain('lu-query-t14');
 
     const waits = JSON.parse(
-      (await oracle.call('get_wait_events', { sid: waiting?.WAITING_SID })).content[0]?.text ??
-        '[]',
+      (await oracle.call('get_wait_events', { sid: waiting?.SID })).content[0]?.text ?? '[]',
     ) as OracleRow[];
     expect(waits[0]?.EVENT).toMatch(/^enq: TX/);
 
