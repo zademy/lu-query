@@ -1,8 +1,10 @@
-# lu-query
+![lu-query](https://raw.githubusercontent.com/zademy/lu-query/master/docs/banner.png)
 
-Servidor MCP que expone una base de datos Oracle a clientes MCP por **stdio**.
+[![npm](https://img.shields.io/npm/v/lu-query?style=flat-square&label=npm)](https://www.npmjs.com/package/lu-query)
+[![license](https://img.shields.io/npm/l/lu-query?style=flat-square&label=license)](https://github.com/zademy/lu-query/blob/master/LICENSE)
+[![node](https://img.shields.io/badge/node-%E2%89%A522-informational?style=flat-square)](https://nodejs.org)
 
-**75 tools · 4 recursos · 9 prompts · driver thin sin instalación · auditoría Markdown por sesión**
+Servidor MCP que expone una base de datos Oracle a clientes MCP por **stdio**: 75 tools para consultar, modificar, inspeccionar y diagnosticar la base, en modo thin sin instalar nada y con auditoría Markdown de cada sentencia.
 
 ## Requisitos
 
