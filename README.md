@@ -4,6 +4,8 @@
 [![license](https://img.shields.io/npm/l/lu-query?style=flat-square&label=license)](https://github.com/zademy/lu-query/blob/master/LICENSE)
 [![node](https://img.shields.io/badge/node-%E2%89%A522-informational?style=flat-square)](https://nodejs.org)
 
+[![lu-query promo](https://github.com/user-attachments/assets/9740a811-cd16-4a68-967f-7792a60d1b04)](https://github.com/user-attachments/assets/9740a811-cd16-4a68-967f-7792a60d1b04)
+
 MCP server that exposes an Oracle database to MCP clients over **stdio** - 75 tools for querying, changing, inspecting and triaging it, with zero-install thin mode and a Markdown audit of every statement.
 
 ## Requirements
