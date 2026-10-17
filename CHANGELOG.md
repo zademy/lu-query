@@ -2,6 +2,14 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.1.0/). El número de versión de `package.json` es la fuente de verdad: el workflow de release crea el tag `v<version>` al mergear a master.
 
+## [2.15.1] - 2026-10-17
+
+### Cambios
+
+- README (EN/ES): la seccion de OpenCode documenta el flujo instalar -> configurar -> verificar con `npm i -g lu-query` como via principal, `npx -y lu-query` como alternativa sin instalacion global y el clon local como tercera via. Se aclara que `MCP_AUDIT_DIR` debe ser una ruta absoluta (el default relativo cae en el directorio de trabajo del proceso, tu proyecto) y que el install script de `oracledb` bloqueado por npm es inocuo en modo thin.
+- README (EN/ES): el banner apunta a una URL absoluta de `raw.githubusercontent.com` porque npmjs.com no resuelve rutas relativas de imagen.
+- README (EN/ES): el badge de licencia de shields.io anade `cacheSeconds` para invalidar la cache negativa guardada cuando el paquete aun no existia.
+
 ## [2.15.0] - 2026-10-17
 
 ### Anadido
