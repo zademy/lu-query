@@ -38,6 +38,57 @@ Configuración del cliente (ejemplo para Claude Desktop; sirve cualquier cliente
 }
 ```
 
+### Con OpenCode
+
+OpenCode lee `mcp.servers` de su configuracion (`opencode.json`, o `.opencode/` en el proyecto). Registra lu-query como servidor local:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "lu-query": {
+        "type": "local",
+        "command": ["npx", "-y", "lu-query"],
+        "environment": {
+          "ORACLE_DB_URL": "{env:ORACLE_DB_URL}",
+          "ORACLE_DB_USERNAME": "{env:ORACLE_DB_USERNAME}",
+          "ORACLE_DB_PASSWORD": "{env:ORACLE_DB_PASSWORD}"
+        },
+        "timeout": { "startup": 120000 }
+      }
+    }
+  }
+}
+```
+
+Notas:
+
+- `{env:NAME}` es la sintaxis de sustitucion de OpenCode para leer una variable de tu entorno; formas de shell como `$NAME` **no** se expanden dentro de JSON. Deja la contrasena en el entorno, no en el archivo.
+- `timeout.startup` sube a 120 s porque la primera ejecucion de `npx` tiene que descargar el paquete; el default global es 45 s.
+- Sin `ORACLE_DB_SCHEMA`, cada tool usa el schema del usuario conectado; fijala para forzar uno.
+- Verifica la conexion con `opencode mcp list`. El pool es perezoso, asi que un servidor conectado sin base de datos igual responde `initialize`; las credenciales solo se necesitan cuando una tool consulta de verdad.
+
+### Ejecutar desde un clon local
+
+Antes de que el paquete exista en npm (o si estas trabajandon en el), apunta el comando a tu build:
+
+```json
+"lu-query": {
+  "type": "local",
+  "command": ["node", "/ruta/absoluta/a/lu-query/dist/index.js"],
+  "cwd": "/ruta/absoluta/a/lu-query",
+  "environment": {
+    "ORACLE_DB_URL": "{env:ORACLE_DB_URL}",
+    "ORACLE_DB_USERNAME": "{env:ORACLE_DB_USERNAME}",
+    "ORACLE_DB_PASSWORD": "{env:ORACLE_DB_PASSWORD}"
+  },
+  "timeout": { "startup": 120000 }
+}
+```
+
+Recuerda `npm run build` primero: `dist/` se genera y esta en .gitignore.
+
 El pool es perezoso: el server arranca y responde `initialize` sin base de datos; la primera tool abre la conexión.
 
 ## Configuración

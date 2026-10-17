@@ -38,6 +38,57 @@ Client configuration (Claude Desktop example; any MCP client works):
 }
 ```
 
+### With OpenCode
+
+OpenCode reads `mcp.servers` from its config (`opencode.json`, or `.opencode/` in the project). Register lu-query as a local server:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "lu-query": {
+        "type": "local",
+        "command": ["npx", "-y", "lu-query"],
+        "environment": {
+          "ORACLE_DB_URL": "{env:ORACLE_DB_URL}",
+          "ORACLE_DB_USERNAME": "{env:ORACLE_DB_USERNAME}",
+          "ORACLE_DB_PASSWORD": "{env:ORACLE_DB_PASSWORD}"
+        },
+        "timeout": { "startup": 120000 }
+      }
+    }
+  }
+}
+```
+
+Notes:
+
+- `{env:NAME}` is OpenCode's substitution syntax for reading a variable from your environment; shell forms like `$NAME` are **not** expanded inside JSON. Keep the password in the environment, not in the file.
+- `timeout.startup` is raised to 120 s because the first run of `npx` has to download the package; the global default is 45 s.
+- Without `ORACLE_DB_SCHEMA`, each tool uses the connected user's schema; set it to pin one.
+- Check the connection with `opencode mcp list`. The pool is lazy, so a connected server with no database still answers `initialize`; the Oracle credentials are only needed when a tool actually queries.
+
+### Running from a local clone
+
+Before the package is on npm (or when hacking on it), point the command at your build:
+
+```json
+"lu-query": {
+  "type": "local",
+  "command": ["node", "/absolute/path/to/lu-query/dist/index.js"],
+  "cwd": "/absolute/path/to/lu-query",
+  "environment": {
+    "ORACLE_DB_URL": "{env:ORACLE_DB_URL}",
+    "ORACLE_DB_USERNAME": "{env:ORACLE_DB_USERNAME}",
+    "ORACLE_DB_PASSWORD": "{env:ORACLE_DB_PASSWORD}"
+  },
+  "timeout": { "startup": 120000 }
+}
+```
+
+Remember `npm run build` first: `dist/` is generated and gitignored.
+
 The pool is lazy: the server starts and answers `initialize` without a database; the first tool call opens the connection.
 
 ## Configuration
