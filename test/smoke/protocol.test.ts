@@ -1,13 +1,16 @@
+import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { describe, expect, it } from 'vitest';
 import { createHarness } from '../helpers/harness.js';
+
+const pkgVersion: string = createRequire(import.meta.url)('../../package.json').version;
 
 describe('protocolo MCP sobre stdio simulado', () => {
   it('responde initialize con la versión declarada', async () => {
     const { client, close } = await createHarness();
 
     try {
-      expect(client.getServerVersion()).toEqual({ name: 'lu-query', version: '2.13.0' });
+      expect(client.getServerVersion()).toEqual({ name: 'lu-query', version: pkgVersion });
     } finally {
       await close();
     }

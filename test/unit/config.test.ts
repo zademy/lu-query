@@ -1,6 +1,9 @@
+import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { ConfigError } from '../../src/errors.js';
 import { assertNodeVersion, loadConfig, parseOracleConnectString } from '../../src/config.js';
+
+const pkgVersion: string = createRequire(import.meta.url)('../../package.json').version;
 
 describe('parseOracleConnectString', () => {
   it('traduce el formato JDBC thin con doble barra a connect string de node-oracledb', () => {
@@ -56,7 +59,7 @@ describe('loadConfig', () => {
     expect(config.connectString).toBeUndefined();
     expect(config.schema).toBeUndefined();
     expect(config.poolSize).toBe(4);
-    expect(config.serverVersion).toBe('2.13.0');
+    expect(config.serverVersion).toBe(pkgVersion);
     expect(config.audit.enabled).toBe(true);
     expect(config.audit.dir).toBe('./mcp-audit-logs');
     expect(config.sentry.enabled).toBe(false);
