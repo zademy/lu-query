@@ -35,4 +35,20 @@ Necesitan una Oracle accesible (el equipo usa el contenedor `oracle-26ai-free`; 
 
 ## Publicación
 
-`npm publish` es **manual y la hace el maintainer** — no hay CI que publique. Antes de publicar: `npm run build`, smoke `npx lu-query` contra un cliente real, y bump de versión en `package.json` + entrada en `CHANGELOG.md`.
+`npm publish` es **manual y la hace el maintainer** — no hay CI que publique. El merge a master crea el _release_ de GitHub (`v<version>` de `package.json`), no el paquete npm.
+
+Antes de publicar: bump de versión en `package.json` + entrada en `CHANGELOG.md`, `npm run lint && npm run typecheck && npm test` desde árbol limpio, y smoke de `npx lu-query` contra un cliente MCP real. `prepublishOnly` compila `dist/` por ti, así que el tarball nunca lleva un build viejo.
+
+```bash
+npm whoami                # confirma la sesión (si no: npm login)
+npm publish --dry-run     # revisa el tarball: deben salir dist/, skills/, README*, LICENSE
+npm publish               # 2FA: pide OTP si tu cuenta lo tiene activo
+npm view lu-query dist-tags   # latest debe apuntar a la versión recién subida
+npm view lu-query version && curl -sI https://registry.npmjs.org/lu-query | head -1   # 200
+```
+
+Notas del registro:
+
+- **Unpublish**: solo dentro de las 72 h desde la publicación, y ese número de versión queda quemado para siempre.
+- **Scripts de instalación**: en npm ≥ 11 el consumidor recibe un aviso por los install scripts de las dependencias (`oracledb`). No es un fallo: el driver thin no necesita compilación nativa. `npm install --ignore-scripts` también funciona.
+- **Nombre**: si el paquete se despublica y pasan 24 h, cualquiera puede tomar el nombre. Publicar pronto o usar un scope.

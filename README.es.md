@@ -1,8 +1,10 @@
-# lu-query
+![lu-query](docs/banner.png)
 
-Servidor MCP que expone una base de datos Oracle a clientes MCP por **stdio**.
+[![npm](https://img.shields.io/npm/v/lu-query?style=flat-square&label=npm)](https://www.npmjs.com/package/lu-query)
+[![license](https://img.shields.io/npm/l/lu-query?style=flat-square&label=license)](https://github.com/zademy/lu-query/blob/master/LICENSE)
+[![node](https://img.shields.io/badge/node-%E2%89%A522-informational?style=flat-square)](https://nodejs.org)
 
-**75 tools · 4 recursos · 9 prompts · driver thin sin instalación · auditoría Markdown por sesión**
+Servidor MCP que expone una base de datos Oracle a clientes MCP por **stdio**: 75 tools para consultar, modificar, inspeccionar y diagnosticar la base, en modo thin sin instalar nada y con auditoría Markdown de cada sentencia.
 
 ## Requisitos
 
@@ -72,7 +74,7 @@ SELECT * FROM V$VERSION
 ```
 ````
 
-Una sesión se relee con el recurso `oracle://audit/session/{id}` (el autocompletado ofrece `current` y los ids recientes). La auditoría se desactiva sola ante errores de I/O y lo avisa por stderr. Desactívala con `MCP_AUDIT_ENABLED=false`. Los archivos contienen cada sentencia ejecutada — protege el directorio (ver [SECURITY.md](SECURITY.md)).
+Una sesión se relee con el recurso `oracle://audit/session/{id}` (el autocompletado ofrece `current` y los ids recientes). La auditoría se desactiva sola ante errores de I/O y lo avisa por stderr. Desactívala con `MCP_AUDIT_ENABLED=false`. Los archivos contienen cada sentencia ejecutada — protege el directorio (ver [SECURITY.md](https://github.com/zademy/lu-query/blob/master/SECURITY.md)).
 
 ## Tools (75)
 
@@ -223,21 +225,30 @@ Requiere `SELECT ANY DICTIONARY` (o equivalente) en el usuario de base de datos;
 
 ## Skills para agentes (opcional)
 
-Carpetas de skills copiables que enseñan a un agente cómo usar bien estas 75 tools: qué tool para cada tarea, en qué orden, qué modifica datos, cómo se ven los fallos y cómo leer los resultados:
+Ocho skills por tarea que enseñan a un agente cómo usar bien estas 75 tools: qué tool para cada trabajo, en qué orden, qué modifica datos, cómo se ven los fallos y cómo leer los resultados. Instálalas con el CLI [`skills`](https://www.npmjs.com/package/skills), que coloca cada skill donde tu agente la busca:
 
 ```bash
-cp -r node_modules/lu-query/skills/lu-query-* ~/.claude/skills/   # Claude Code / OpenCode
+npx skills@latest add zademy/lu-query           # instala las ocho skills
+npx skills@latest add zademy/lu-query --list    # solo listarlas
 ```
 
-Ocho skills (`lu-query-explore-schema`, `lu-query-query-data`, `lu-query-audit-data-quality`, `lu-query-plan-data-changes`, `lu-query-manage-schema`, `lu-query-use-plsql`, `lu-query-tune-sql`, `lu-query-triage-incident`), cada una con referencias de sus tools y ejemplos verificados contra una base Oracle 26ai real. Ver [`skills/README.md`](skills/README.md). No se instala nada automáticamente.
+Flags útiles: `-g` instala global en vez de por proyecto, `-a <agent>` elige el destino (`claude-code`, `opencode`, `cursor`, `codex`, `gemini-cli`, …), `-s <skill>` instala una sola (o `'*'` para todas), `--copy` copia en vez de enlazar.
+
+¿Sin CLI? Cópialas a mano: cada carpeta es autocontenida (`SKILL.md` + `references/`):
+
+```bash
+cp -r node_modules/lu-query/skills/lu-query-* ~/.claude/skills/   # Claude Code y OpenCode
+```
+
+Skills: `lu-query-explore-schema`, `lu-query-query-data`, `lu-query-audit-data-quality`, `lu-query-plan-data-changes`, `lu-query-manage-schema`, `lu-query-use-plsql`, `lu-query-tune-sql`, `lu-query-triage-incident`. Catálogo y procedencia de los ejemplos: [`skills/README.md`](https://github.com/zademy/lu-query/blob/master/skills/README.md). Instalar el server nunca instala skills por su cuenta.
 
 ## Seguridad
 
-Ver [SECURITY.md](SECURITY.md). Puntos clave: solo stdio (sin puertos), allow-list de identificadores, literales escapados, directorio de auditoría a proteger. El usuario de base de datos debe ser de mínimos privilegios: el server depende de los grants de Oracle, no de sus propios checks, para todo lo que las tools no validan.
+Ver [SECURITY.md](https://github.com/zademy/lu-query/blob/master/SECURITY.md). Puntos clave: solo stdio (sin puertos), allow-list de identificadores, literales escapados, directorio de auditoría a proteger. El usuario de base de datos debe ser de mínimos privilegios: el server depende de los grants de Oracle, no de sus propios checks, para todo lo que las tools no validan.
 
 ## Contribuir
 
-Ver [CONTRIBUTING.md](CONTRIBUTING.md). La publicación a npm es manual y la hace el mantenedor. Vocabulario en [GLOSSARY.md](GLOSSARY.md); decisiones en [docs/adr/](docs/adr/).
+Ver [CONTRIBUTING.md](https://github.com/zademy/lu-query/blob/master/CONTRIBUTING.md). La publicación a npm es manual y la hace el mantenedor. Vocabulario en [GLOSSARY.md](https://github.com/zademy/lu-query/blob/master/GLOSSARY.md); decisiones en [docs/adr/](https://github.com/zademy/lu-query/blob/master/docs/adr/).
 
 ## Licencia
 

@@ -6,20 +6,28 @@ They are documentation, not code: `lu-query` itself never installs them, so noth
 
 ## Install (optional)
 
-Copy the folders you want into your agent's skills directory:
+With the [`skills`](https://www.npmjs.com/package/skills) CLI - it discovers every skill in this repo and puts it where your agent looks:
 
 ```bash
-# Claude Code / OpenCode (both discover .claude/skills/<name>/SKILL.md)
-cp -r skills/lu-query-* ~/.claude/skills/
-
-# or per-project
-cp -r skills/lu-query-* .claude/skills/
+npx skills@latest add zademy/lu-query                        # all eight skills
+npx skills@latest add zademy/lu-query --list                 # show them without installing
+npx skills@latest add zademy/lu-query -s lu-query-use-plsql # just one
+npx skills@latest add zademy/lu-query -g -a opencode        # global, for OpenCode
 ```
 
-| Agent       | Skills directory                                 |
-| ----------- | ------------------------------------------------ |
-| Claude Code | `~/.claude/skills/` or `.claude/skills/`         |
-| OpenCode    | `~/.config/opencode/skill/` or `.claude/skills/` |
+By hand, if you prefer no CLI (each folder is self-contained):
+
+```bash
+cp -r skills/lu-query-* ~/.claude/skills/    # or .claude/skills/ per project
+```
+
+| Agent                           | Skills directory                         |
+| ------------------------------- | ---------------------------------------- |
+| Claude Code                     | `~/.claude/skills/` or `.claude/skills/` |
+| OpenCode                        | `~/.config/opencode/skill/`              |
+| Cline / Codex / Cursor / Gemini | `.agents/skills/` or `~/.agents/skills/` |
+
+Already installed `lu-query` from npm? The same folders ship inside the package (`node_modules/lu-query/skills/`).
 
 Nothing else is required: the skills reference the MCP server by tool name, so they work with any MCP client (Claude Desktop, OpenCode, Zed, …) as long as `lu-query` is configured with `ORACLE_DB_URL`, `ORACLE_DB_USERNAME` and `ORACLE_DB_PASSWORD`.
 

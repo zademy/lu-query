@@ -1,0 +1,298 @@
+<!doctype html>
+<!--
+  Generador del banner de lu-query (docs/banner.png).
+
+  Render (Chrome headless, 2x para nitidez en GitHub):
+    npm run banner
+  Equivalente manual:
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless \
+      --disable-gpu --hide-scrollbars --force-device-scale-factor=2 \
+      --window-size=1600,600 --screenshot=docs/banner.png scripts/banner.html
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --bg: #0b0d11;
+        --grid: #171a21;
+        --ink: #eef1f6;
+        --muted: #8b93a3;
+        --faint: #5a6273;
+        --red: #f0524b;
+        --teal: #5ee0d0;
+        --card: #12151b;
+        --line: #232833;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 1600px;
+        height: 600px;
+      }
+      body {
+        background:
+          linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 80px 80px,
+          linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 80px 80px,
+          radial-gradient(1200px 600px at 78% 12%, #161b24 0%, transparent 60%),
+          var(--bg);
+        color: var(--ink);
+        font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+        padding: 48px 72px 36px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .mono {
+        font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+      }
+      .kicker {
+        color: var(--muted);
+        letter-spacing: 0.34em;
+        font-size: 15px;
+        text-transform: uppercase;
+        margin-top: 18px;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .mark {
+        display: grid;
+        grid-template-columns: repeat(2, 18px);
+        grid-gap: 4px;
+      }
+      .mark span {
+        width: 18px;
+        height: 18px;
+        border-radius: 4px;
+      }
+      .name {
+        font-size: 26px;
+        font-weight: 620;
+        letter-spacing: -0.01em;
+      }
+      .for {
+        color: var(--faint);
+        font-size: 15px;
+        letter-spacing: 0.3em;
+      }
+      .meta {
+        color: var(--faint);
+        font-size: 14px;
+        letter-spacing: 0.24em;
+      }
+      .meta b {
+        color: var(--teal);
+        font-weight: 600;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: 1fr 640px;
+        gap: 60px;
+        align-items: center;
+        flex: 1;
+        min-height: 0;
+      }
+
+      h1 {
+        font-size: 54px;
+        line-height: 1.06;
+        letter-spacing: -0.025em;
+        font-weight: 640;
+        margin-top: 24px;
+      }
+      h1 em {
+        font-style: normal;
+        color: var(--red);
+      }
+      .sub {
+        margin-top: 18px;
+        color: var(--muted);
+        font-size: 19px;
+        line-height: 1.5;
+        max-width: 620px;
+      }
+
+      .cols {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 26px;
+        margin-top: 34px;
+      }
+      .cols h3 {
+        font-size: 14px;
+        letter-spacing: 0.2em;
+        color: var(--ink);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .cols h3 i {
+        width: 9px;
+        height: 9px;
+        border-radius: 2px;
+        display: inline-block;
+      }
+      .cols p {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+        overflow: hidden;
+      }
+      .card header {
+        padding: 18px 26px;
+        border-bottom: 1px solid var(--line);
+      }
+      .card .path {
+        font-size: 17px;
+      }
+      .card .bytes {
+        color: var(--faint);
+        font-size: 14px;
+      }
+      .card pre {
+        padding: 20px 26px;
+        font-size: 15px;
+        line-height: 1.7;
+        color: #c7cddb;
+      }
+      .kw {
+        color: var(--teal);
+      }
+      .num {
+        color: #f0b86e;
+      }
+      .ok {
+        color: var(--red);
+      }
+      .dim {
+        color: var(--faint);
+      }
+      .card footer {
+        padding: 14px 26px;
+        border-top: 1px solid var(--line);
+        display: flex;
+        justify-content: space-between;
+        font-size: 13.5px;
+        color: var(--muted);
+      }
+      .pill {
+        color: #14161b;
+        background: var(--teal);
+        border-radius: 999px;
+        padding: 3px 12px;
+        font-size: 12.5px;
+      }
+
+      footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-top: 1px solid var(--line);
+        padding-top: 22px;
+        color: var(--faint);
+        font-size: 14px;
+        letter-spacing: 0.2em;
+      }
+      .repo {
+        color: var(--teal);
+        letter-spacing: 0.22em;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <div class="mark">
+          <span style="background: #f0524b"></span><span style="background: #5ee0d0"></span>
+          <span style="background: #2c3340"></span><span style="background: #f0524b"></span>
+        </div>
+        <span class="name">lu-query</span>
+        <span class="for mono">FOR MCP AGENTS</span>
+      </div>
+      <div class="meta mono">
+        <b>75 TOOLS</b> &nbsp;·&nbsp; THIN DRIVER &nbsp;·&nbsp; ZERO ORACLE CLIENT &nbsp;·&nbsp; MIT
+      </div>
+    </header>
+
+    <main>
+      <section>
+        <p class="kicker mono">ORACLE DATABASE OVER STDIO</p>
+        <h1>
+          Your Oracle database,<br />as tools for your agent.<br /><em>Every call audited.</em>
+        </h1>
+        <p class="sub">
+          Query, migrate and triage Oracle from your agent &mdash; no Oracle client, and every
+          statement on the record in Markdown.
+        </p>
+        <div class="cols">
+          <div>
+            <h3 class="mono"><i style="background: #f0524b"></i>75 TOOLS</h3>
+            <p>Query, DML, DDL, metadata, PL/SQL, explain plans and V$ performance.</p>
+          </div>
+          <div>
+            <h3 class="mono"><i style="background: #5ee0d0"></i>NO CLIENT</h3>
+            <p>node-oracledb in thin mode. <span class="mono">npx lu-query</span> and connect.</p>
+          </div>
+          <div>
+            <h3 class="mono"><i style="background: #8b93a3"></i>MARKDOWN AUDIT</h3>
+            <p>
+              One <span class="mono">.md</span> per session. One entry per statement, SQL verbatim.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <div class="card">
+        <header>
+          <span class="path mono">lu-query-20261017T202210.184-0600-log.md</span>
+        </header>
+        <pre
+          class="mono"
+        >### #7 · 20:22:11 · run_query · SELECT · READ · <span class="ok">✓ OK</span>
+| Inicio | 20:22:11.402 | Fin | 20:22:11.489 |
+| Duración | <span class="num">87 ms</span> | Filas | 3 |
+
+<span class="dim">```sql</span>
+SELECT EMP_ID, EMAIL, SALARY
+  FROM SKL_EMP
+ ORDER BY SALARY DESC
+<span class="dim">```</span>
+<span class="dim">→</span> {"rowCount":<span class="num">3</span>, "truncated":<span class="kw">false</span>}</pre>
+        <footer>
+          <span class="mono">read-only guard: non-SELECT rejected</span>
+          <span class="mono pill">75 / 75</span>
+        </footer>
+      </div>
+    </main>
+
+    <footer class="mono">
+      <span
+        >ORACLE 12c+ &nbsp;·&nbsp; THIN MODE &nbsp;·&nbsp; STDIO ONLY &nbsp;·&nbsp; 3 TIMEOUT LAYERS
+        &nbsp;·&nbsp; 9 PROMPTS</span
+      >
+      <span class="repo">GITHUB.COM/ZADEMY/LU-QUERY</span>
+    </footer>
+  </body>
+</html>

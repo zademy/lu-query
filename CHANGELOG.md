@@ -2,6 +2,15 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.1.0/). El número de versión de `package.json` es la fuente de verdad: el workflow de release crea el tag `v<version>` al mergear a master.
 
+## [2.14.1] - 2026-10-17
+
+### Cambios internos
+
+- Listo para publicar en npm: `prepublishOnly: npm run build` (el tarball nunca lleva un `dist/` viejo o ausente), links absolutos en README/README.es/CHANGELOG (los relativos rompen en npmjs.com) y runbook de publicacion en `CONTRIBUTING.md`.
+- Banner del proyecto (`docs/banner.png`, generado con `npm run banner` desde `scripts/banner.html`) al inicio de ambos README, con badges npm/license/node.
+- Documentacion de instalacion de skills con `npx skills@latest add zademy/lu-query` en ambos README y en `skills/README.md`.
+- Autor: `Sadot Hernandez Moreno` en `package.json`, `LICENSE` y README.
+
 ## [2.14.0] - 2026-10-17
 
 ### Añadido
@@ -39,4 +48,4 @@ Release inicial: puerto a TypeScript del servidor Java `mcp-oracle-db` 2.13.0, c
 
 ### Seguridad
 
-- stdio únicamente; allow-list de identificadores `^[A-Za-z][A-Za-z0-9_$#]{0,127}$` y escape de literales (`'` → `''`). Ver [SECURITY.md](SECURITY.md).
+- stdio únicamente; allow-list de identificadores `^[A-Za-z][A-Za-z0-9_$#]{0,127}$` y escape de literales (`'` → `''`). Ver [SECURITY.md](https://github.com/zademy/lu-query/blob/master/SECURITY.md).
