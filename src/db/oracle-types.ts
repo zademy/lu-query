@@ -16,11 +16,15 @@ export interface OracleResult<Row = OracleRow> {
 }
 
 export interface OracleConnection {
+  /** Timeout de ida y vuelta en ms (capa de socket del Java: readTimeout). */
+  callTimeout: number;
   execute<Row = OracleRow>(
     sql: string,
     binds?: OracleBind[],
     options?: Record<string, unknown>,
   ): Promise<OracleResult<Row>>;
+  /** Cancela la sentencia en curso en el servidor (el ORA-01013 del Java). */
+  breakExecution(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -29,6 +33,13 @@ export interface OraclePool {
   close(): Promise<void>;
 }
 
+/** Corre el init de sesión de una conexión recién creada (connection-init-sql del Java). */
+export type OracleSessionCallback = (
+  connection: OracleConnection,
+  tag: string,
+  done: (error?: unknown) => void,
+) => void;
+
 export interface OraclePoolAttributes {
   user?: string;
   password?: string;
@@ -36,11 +47,13 @@ export interface OraclePoolAttributes {
   poolMin: number;
   poolMax: number;
   poolIncrement: number;
+  /** Segundos (verificado en thin: NJS-510 lo reporta en segundos). */
   connectTimeout: number;
+  poolAlias: string;
+  sessionCallback?: OracleSessionCallback;
 }
 
 export interface OracleModule {
-  thin: boolean;
   OUT_FORMAT_OBJECT: number;
   createPool(attributes: OraclePoolAttributes): Promise<OraclePool>;
 }

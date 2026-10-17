@@ -13,12 +13,12 @@ describe('protocolo MCP sobre stdio simulado', () => {
     }
   });
 
-  it('responde tools/list con lista vacía', async () => {
+  it('responde tools/list con las tools registradas', async () => {
     const { client, close } = await createHarness();
 
     try {
       const { tools } = await client.listTools();
-      expect(tools).toEqual([]);
+      expect(tools.map((tool) => tool.name)).toContain('test_connection');
     } finally {
       await close();
     }
