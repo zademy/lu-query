@@ -104,8 +104,11 @@ async function sampleData(
   const limit = requested > 0 ? clampMaxRows(requested) : DEFAULT_SAMPLE_ROWS;
 
   onProgress?.(10, `Sampling ${name}`);
+  // maxRows explícito: el default del driver (100) es menor que nuestro tope.
   const rows = await dataAccess.queryForList(
     `SELECT * FROM ${name} FETCH FIRST ${limit} ROWS ONLY`,
+    undefined,
+    { maxRows: limit },
   );
   onProgress?.(90, `Sampled ${rows.length} rows from ${name}`);
   return toResult(rows, { offset: 0, limit });

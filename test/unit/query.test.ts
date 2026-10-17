@@ -137,6 +137,7 @@ describe('run_query', () => {
       expect(dataAccess.calls[0]?.sql).toBe(
         'SELECT * FROM ( SELECT * FROM employees ) WHERE ROWNUM <= 1000',
       );
+      expect(dataAccess.calls[0]?.options).toEqual({ maxRows: 1000 });
       expect(payload(result)).toMatchObject({ offset: 0, limit: 1000, rowLimit: 1000 });
     });
   });
@@ -220,6 +221,8 @@ describe('get_sample_data', () => {
     });
 
     expect(dataAccess.calls[0]?.sql).toBe('SELECT * FROM "HR"."EMPLOYEES" FETCH FIRST 3 ROWS ONLY');
+    // El tope viaja también como maxRows: el default del driver son 100 filas.
+    expect(dataAccess.calls[0]?.options).toEqual({ maxRows: 3 });
   });
 
   it('rechaza un identificador fuera de la allow-list sin tocar la base de datos', async () => {
