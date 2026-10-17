@@ -72,7 +72,7 @@ SELECT * FROM V$VERSION
 ```
 ````
 
-Read a session back with the resource `oracle://audit/session/{id}` (autocomplete offers `current` and recent ids). Audit disables itself on I/O errors and says so on stderr. Set `MCP_AUDIT_ENABLED=false` to turn it off. Audit files contain every statement executed — protect the directory (see [SECURITY.md](SECURITY.md)).
+Read a session back with the resource `oracle://audit/session/{id}` (autocomplete offers `current` and recent ids). Audit disables itself on I/O errors and says so on stderr. Set `MCP_AUDIT_ENABLED=false` to turn it off. Audit files contain every statement executed — protect the directory (see [SECURITY.md](https://github.com/zademy/lu-query/blob/master/SECURITY.md)).
 
 ## Tools (75)
 
@@ -229,15 +229,15 @@ Copyable skill folders teach an agent how to use these 75 tools well - which too
 cp -r node_modules/lu-query/skills/lu-query-* ~/.claude/skills/   # Claude Code / OpenCode
 ```
 
-Eight skills (`lu-query-explore-schema`, `lu-query-query-data`, `lu-query-audit-data-quality`, `lu-query-plan-data-changes`, `lu-query-manage-schema`, `lu-query-use-plsql`, `lu-query-tune-sql`, `lu-query-triage-incident`), each with tool references and examples verified against a real Oracle 26ai database. See [`skills/README.md`](skills/README.md). Nothing is installed automatically.
+Eight skills (`lu-query-explore-schema`, `lu-query-query-data`, `lu-query-audit-data-quality`, `lu-query-plan-data-changes`, `lu-query-manage-schema`, `lu-query-use-plsql`, `lu-query-tune-sql`, `lu-query-triage-incident`), each with tool references and examples verified against a real Oracle 26ai database. See [`skills/README.md`](https://github.com/zademy/lu-query/blob/master/skills/README.md). Nothing is installed automatically.
 
 ## Security
 
-See [SECURITY.md](SECURITY.md). Highlights: stdio only (no ports), identifier allow-list, escaped literals, audit directory must be protected. The database user should be least-privilege: the server relies on Oracle grants, not on its own checks, for anything the tools do not validate.
+See [SECURITY.md](https://github.com/zademy/lu-query/blob/master/SECURITY.md). Highlights: stdio only (no ports), identifier allow-list, escaped literals, audit directory must be protected. The database user should be least-privilege: the server relies on Oracle grants, not on its own checks, for anything the tools do not validate.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Releasing to npm is manual and done by the maintainer. Vocabulary in [GLOSSARY.md](GLOSSARY.md); decisions in [docs/adr/](docs/adr/).
+See [CONTRIBUTING.md](https://github.com/zademy/lu-query/blob/master/CONTRIBUTING.md). Releasing to npm is manual and done by the maintainer. Vocabulary in [GLOSSARY.md](https://github.com/zademy/lu-query/blob/master/GLOSSARY.md); decisions in [docs/adr/](https://github.com/zademy/lu-query/blob/master/docs/adr/).
 
 ## License
 

@@ -39,4 +39,4 @@ Release inicial: puerto a TypeScript del servidor Java `mcp-oracle-db` 2.13.0, c
 
 ### Seguridad
 
-- stdio únicamente; allow-list de identificadores `^[A-Za-z][A-Za-z0-9_$#]{0,127}$` y escape de literales (`'` → `''`). Ver [SECURITY.md](SECURITY.md).
+- stdio únicamente; allow-list de identificadores `^[A-Za-z][A-Za-z0-9_$#]{0,127}$` y escape de literales (`'` → `''`). Ver [SECURITY.md](https://github.com/zademy/lu-query/blob/master/SECURITY.md).

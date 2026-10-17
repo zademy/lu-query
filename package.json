@@ -3,7 +3,7 @@
   "version": "2.14.0",
   "description": "MCP server for Oracle DB over stdio (1:1 port of mcp-oracle-db 2.13.0)",
   "license": "MIT",
-  "author": "Sadot Hernández Moreno",
+  "author": "Sadot Hern\u00e1ndez Moreno",
   "type": "module",
   "bin": {
     "lu-query": "dist/index.js"
@@ -23,7 +23,8 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
-    "test:integration": "vitest run --project integration"
+    "test:integration": "vitest run --project integration",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.0",
