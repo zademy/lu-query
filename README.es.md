@@ -40,10 +40,15 @@ Configuración del cliente (ejemplo para Claude Desktop; sirve cualquier cliente
 
 ### Con OpenCode
 
-**No hay nada que instalar globalmente**: OpenCode lanza el servidor bajo demanda y `npx` lo deja cacheado, igual que `npx lu-query` desde una terminal.
+**1. Instala una vez.** El paquete trae el binario `lu-query`, asi que una instalacion global te da el comando para siempre:
 
-1. Exporta las credenciales de Oracle en el entorno que lanza OpenCode (tu perfil de shell sirve). No hace falta que vivan en el archivo de configuracion.
-2. Registra el servidor en `opencode.json` (global) o en `.opencode/` (por proyecto):
+```bash
+npm i -g lu-query
+```
+
+**2. Exporta las credenciales de Oracle** en el entorno que lanza OpenCode (tu perfil de shell sirve). No hace falta que vivan en el archivo de configuracion.
+
+**3. Registra el servidor** en `opencode.json` (global, en `~/.config/opencode/`) o en `.opencode/` para un solo proyecto:
 
 ```json
 {
@@ -52,32 +57,34 @@ Configuración del cliente (ejemplo para Claude Desktop; sirve cualquier cliente
     "servers": {
       "lu-query": {
         "type": "local",
-        "command": ["npx", "-y", "lu-query"],
+        "command": ["lu-query"],
         "environment": {
           "ORACLE_DB_URL": "{env:ORACLE_DB_URL}",
           "ORACLE_DB_USERNAME": "{env:ORACLE_DB_USERNAME}",
-          "ORACLE_DB_PASSWORD": "{env:ORACLE_DB_PASSWORD}"
-        },
-        "timeout": { "startup": 120000 }
+          "ORACLE_DB_PASSWORD": "{env:ORACLE_DB_PASSWORD}",
+          "MCP_AUDIT_DIR": "/home/tu-usuario/.lu-query/audit"
+        }
       }
     }
   }
 }
 ```
 
-3. Verificalo: `opencode mcp list` → `✓ lu-query connected`. Los nueve prompts MCP aparecen como `/lu-query:review-sql-performance` y compañía.
+**4. Verificalo:** `opencode mcp list` → `✓ lu-query connected`. Los nueve prompts MCP se vuelven comandos tipo `/lu-query:review-sql-performance`.
 
 Notas:
 
 - `{env:NAME}` es la sintaxis de sustitucion de OpenCode para leer una variable del entorno; formas de shell como `$NAME` **no** se expanden dentro de JSON. Deja la contrasena en el entorno, no en el archivo.
-- `timeout.startup` sube a 120 s porque la primera ejecucion de `npx` descarga el paquete; el default global es 45 s.
-- ¿Prefieres instalacion global? `npm i -g lu-query` una vez y luego `"command": ["lu-query"]`: mismo comportamiento, sin descarga en la primera llamada.
-- Sin `ORACLE_DB_SCHEMA`, cada tool usa el schema del usuario conectado; fijala para forzar uno.
-- El pool es perezoso: un servidor conectado sin base de datos igual responde `initialize`; las credenciales solo se necesitan cuando una tool consulta de verdad.
+- Fija `MCP_AUDIT_DIR` a una ruta absoluta como la de arriba. Sin eso, el Markdown de auditoria cae en `./mcp-audit-logs` relativo al directorio de trabajo del proceso, que es tu proyecto: los archivos de auditoria aparecerian en el repo. Con `MCP_AUDIT_ENABLED=false` se desactiva.
+- npm puede avisar de que bloqueo los install scripts de `oracledb`. Es inocuo: lu-query corre node-oracledb en modo thin y no necesita cliente nativo.
+- Sin `ORACLE_DB_SCHEMA`? Cada tool usa el schema del usuario conectado; fijala para forzar uno.
+- El pool es perezoso: el server responde `initialize` sin base de datos; las credenciales solo hacen falta cuando una tool consulta de verdad.
+
+Prefieres no instalar global? Usa `"command": ["npx", "-y", "lu-query"]`: mismo comportamiento, npx descarga y cachea el paquete en la primera llamada — y esa primera llamada puede pasarse del timeout de arranque de 30 s, asi que agrega `"timeout": { "startup": 120000 }`.
 
 ### Desde un clon local
 
-Mientras trabajas en el codigo (o antes de que el paquete exista en npm), apunta el comando a tu build:
+Mientras trabajas en el codigo (o con una build sin publicar), apunta el comando a tu build local en vez de la instalada:
 
 ```json
 "lu-query": {
@@ -88,12 +95,11 @@ Mientras trabajas en el codigo (o antes de que el paquete exista en npm), apunta
     "ORACLE_DB_URL": "{env:ORACLE_DB_URL}",
     "ORACLE_DB_USERNAME": "{env:ORACLE_DB_USERNAME}",
     "ORACLE_DB_PASSWORD": "{env:ORACLE_DB_PASSWORD}"
-  },
-  "timeout": { "startup": 120000 }
+  }
 }
 ```
 
-Recuerda `npm run build` primero: `dist/` se genera y esta en .gitignore.
+Corre `npm run build` primero: `dist/` se genera y esta en .gitignore.
 
 El pool es perezoso: el server arranca y responde `initialize` sin base de datos; la primera tool abre la conexión.
 
