@@ -25,19 +25,6 @@ jobs:
       - name: Dependencias
         run: npm ci
 
-      - name: Diagnostico OIDC
-        run: |
-          echo "npm=$(npm --version) node=$(node --version)"
-          echo "ACTIONS_ID_TOKEN_REQUEST_URL: $([ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ] && echo si || echo NO)"
-          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN: $([ -n "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ] && echo si || echo NO)"
-          echo "NODE_AUTH_TOKEN: $([ -n "$NODE_AUTH_TOKEN" ] && echo si || echo NO)"
-          ID=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).value||'')")
-          echo "claims:"
-          node -e "console.log(JSON.stringify(JSON.parse(Buffer.from(process.argv[1].split('.')[1],'base64url').toString()),null,1))" "$ID"
-          echo "intercambio:"
-          curl -s -X POST -H "Authorization: Bearer $ID" -H "Content-Type: application/json" https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/lu-query | head -c 800
-          echo
-
       - name: Publicar en npm con trusted publishing
         run: |
           VERSION=$(node -p "require('./package.json').version")
