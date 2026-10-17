@@ -1,6 +1,6 @@
 # lu-query
 
-MCP server that exposes an Oracle database to MCP clients over **stdio**. TypeScript port with 1:1 tool parity with [mcp-oracle-db](https://www.npmjs.com/package/mcp-oracle-db) 2.13.0 (Java).
+MCP server that exposes an Oracle database to MCP clients over **stdio**.
 
 **75 tools · 4 resources · 9 prompts · zero-install thin driver · per-session Markdown audit**
 
@@ -53,6 +53,7 @@ The pool is lazy: the server starts and answers `initialize` without a database;
 | `SENTRY_ENV`                  | no        | —                    | Sentry environment                                                                                     |
 | `SENTRY_RELEASE`              | no        | `MCP_SERVER_VERSION` | Sentry release                                                                                         |
 | `SENTRY_SEND_DEFAULT_PII`     | no        | `false`              | PII in Sentry events                                                                                   |
+| `SENTRY_AUTH_TOKEN`           | no        | —                    | Accepted for config parity; unused at runtime (`@sentry/node` has no such setting)                     |
 | `LOG_LEVEL` / `APP_LOG_LEVEL` | no        | `INFO`               | Server log level                                                                                       |
 
 **Limits.** Result sets are capped at 1000 rows. Three timeout layers: statement 120 s, socket 30 s, MCP request watchdog 150 s. Identifiers are validated against `^[A-Za-z][A-Za-z0-9_$#]{0,127}$`; literals are escaped (`'` -> `''`).
