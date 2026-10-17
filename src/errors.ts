@@ -1,4 +1,5 @@
 import { TIMEOUTS } from './config.js';
+import { reportToolError } from './observability/sentry.js';
 
 /**
  * Errores del dominio. Toda excepción que cruza una tool se convierte en un
@@ -154,6 +155,7 @@ export async function guardTool<T extends ToolTextResult>(
       }),
     ]);
   } catch (error) {
+    reportToolError(error);
     return asToolError(error);
   } finally {
     if (timer !== undefined) clearTimeout(timer);

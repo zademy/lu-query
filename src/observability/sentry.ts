@@ -31,7 +31,19 @@ export function beforeSend(event: Sentry.ErrorEvent): Sentry.ErrorEvent | null {
 
 /** Sink apagado: mismo contrato, cero coste y cero red. */
 function disabledSink(): SentrySink {
+
   return { enabled: false, captureException: () => {}, captureMessage: () => {} };
+}
+
+/** Sink activo; sin inicializar es el apagado, así que reportar es un no-op. */
+let activeSink: SentrySink = disabledSink();
+
+/**
+ * Reporta un error de tool al sink activo. Es el equivalente de
+ * `SentryCaptureAspect`: las tools capturan, el filtro `beforeSend` decide.
+ */
+export function reportToolError(error: unknown, context?: Record<string, unknown>): void {
+  activeSink.captureException(error, context);
 }
 
 /** Reportar un fallo nunca debe tumbar la petición que lo provoca. */
@@ -74,7 +86,7 @@ export function createSentrySink(config: ResolvedConfig): SentrySink {
     return disabledSink();
   }
 
-  return {
+  const sink: SentrySink = {
     enabled: true,
     captureException(error, context) {
       safely(() => Sentry.captureException(error, context ? { extra: context } : undefined));
@@ -83,6 +95,8 @@ export function createSentrySink(config: ResolvedConfig): SentrySink {
       safely(() => Sentry.captureMessage(message));
     },
   };
+  activeSink = sink;
+  return sink;
 }
 
 /**
