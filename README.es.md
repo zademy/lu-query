@@ -2,7 +2,7 @@
 
 Servidor MCP que expone una base de datos Oracle a clientes MCP por **stdio**. Puerto a TypeScript con paridad 1:1 de tools con [mcp-oracle-db](https://www.npmjs.com/package/mcp-oracle-db) 2.13.0 (Java).
 
-**73 tools · 4 recursos · 9 prompts · driver thin sin instalación · auditoría Markdown por sesión**
+**75 tools · 4 recursos · 9 prompts · driver thin sin instalación · auditoría Markdown por sesión**
 
 ## Requisitos
 
@@ -72,7 +72,7 @@ SELECT * FROM V$VERSION
 
 Una sesión se relee con el recurso `oracle://audit/session/{id}` (el autocompletado ofrece `current` y los ids recientes). La auditoría se desactiva sola ante errores de I/O y lo avisa por stderr. Desactívala con `MCP_AUDIT_ENABLED=false`. Los archivos contienen cada sentencia ejecutada — protege el directorio (ver [SECURITY.md](SECURITY.md)).
 
-## Tools (73)
+## Tools (75)
 
 ### Sistema (1)
 
@@ -174,10 +174,12 @@ Una sesión se relee con el recurso `oracle://audit/session/{id}` (el autocomple
 | `list_unused_indexes` | Índices con columnas e información de uso best-effort |
 | `run_sql_tuning_advisor` | Reporte de DBMS_SQLTUNE con recomendaciones |
 
-### Grafos y helpers (5)
+### Grafos y helpers (7)
 
 | Tool | Propósito |
 | --- | --- |
+| `get_next_sequence_value` | NEXTVAL de una secuencia — lectura con efecto: avanza el contador |
+| `validate_fk_integrity` | Filas huérfanas por FK de una tabla (lista vacía = integridad intacta) |
 | `find_free_id` | Id libre más bajo en 1..maxRange (default 1000, tope 10000) no presente en la tabla |
 | `find_duplicates` | Grupos de valores duplicados en una o más columnas (NULLs excluidos) |
 | `count_rows` | Conteo exacto de filas de una tabla sin correr SQL |

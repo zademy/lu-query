@@ -1,15 +1,7 @@
 import { z } from 'zod';
 import { withToolContext } from '../audit/context.js';
-import { auditStatement } from '../audit/audit-writer.js';
-import { TIMEOUTS, type ResolvedConfig } from '../config.js';
 import type { DataAccess } from '../db/data-access.js';
-import {
-  loadOracle,
-  type OracleConnection,
-  type OracleModule,
-  type OracleRow,
-} from '../db/oracle-types.js';
-import { currentSchemaInitSql } from '../db/pool.js';
+import type { OracleRow } from '../db/oracle-types.js';
 import { guardTool, SecurityError } from '../errors.js';
 import type { ServerContext } from '../server.js';
 import { buildCappedSelect } from '../sql/capped-select.js';
@@ -41,47 +33,6 @@ export interface DmlDryRunResult {
   rowsAffected: number;
   rolledBack: boolean;
   note: string;
-}
-
-/** Cómo termina la transacción que ejecuta el DML. */
-export type TransactionOutcome = 'commit' | 'rollback';
-
-/**
- * Conexión con control de transacción. `db/oracle-types` declara el subset que
- * usa el chokepoint, que no incluye transacciones: lo que necesitan estas tools
- * se declara aquí.
- */
-export interface TransactionConnection extends OracleConnection {
-  autoCommit: boolean;
-  commit(): Promise<void>;
-  rollback(): Promise<void>;
-}
-
-/**
- * Ejecuta el DML en una transacción propia y la cierra con commit o rollback.
- *
- * Las tools no pueden usar `DataAccess.execute`: en oracledb@26 thin solo un
- * `commit()` explícito deja el cambio persisted (con autoCommit sin efecto), y
- * cada llamada del chokepoint toma y devuelve una conexión del pool, así que
- * su DML se pierde al cerrar. Por eso el DML de escritura abre conexión y
- * decide él mismo el desenlace.
- */
-export async function runInTransaction(
-  open: () => Promise<TransactionConnection>,
-  sql: string,
-  outcome: TransactionOutcome,
-): Promise<number> {
-  const connection = await open();
-  connection.autoCommit = false;
-  try {
-    const rowsAffected = (await connection.execute(sql)).rowsAffected ?? 0;
-    if (outcome === 'commit') await connection.commit();
-    else await connection.rollback();
-    return rowsAffected;
-  } finally {
-    // Sin confirmar, cerrar la conexión revierte lo que quedara vivo.
-    await connection.close();
-  }
 }
 
 /**
@@ -129,59 +80,20 @@ async function previewDml(dataAccess: DataAccess, sql: string): Promise<DmlPrevi
   };
 }
 
-/** node-oracledb solo tipa `createPool`; `getConnection` es la otra forma de abrir sesión. */
-interface DirectOracle extends OracleModule {
-  getConnection(attributes: {
-    user?: string;
-    password?: string;
-    connectString?: string;
-    connectTimeout: number;
-  }): Promise<OracleConnection>;
-}
-
-/**
- * Conexión propia del DML, con el mismo `ALTER SESSION` de ORACLE_DB_SCHEMA que
- * aplica el pool. No sale del pool porque este es el pool del chokepoint DataAccess
- * y su vida la manda él, no la tool.
- */
-async function openDmlConnection(config: ResolvedConfig): Promise<TransactionConnection> {
-  const oracledb = (await loadOracle()) as DirectOracle;
-  const connection = (await oracledb.getConnection({
-    user: config.user,
-    password: config.password,
-    connectString: config.connectString,
-    connectTimeout: TIMEOUTS.socketSeconds,
-  })) as TransactionConnection;
-  connection.callTimeout = TIMEOUTS.socketSeconds * 1000;
-
-  const initSql = currentSchemaInitSql(config.schema);
-  if (initSql) await connection.execute(initSql);
-  return connection;
-}
-
 /**
  * Aplica el DML y lo confirma. El kind solo etiqueta el resultado: Oracle es el
  * que autoriza, así que un kind `UNKNOWN` (MERGE y compañía) se manda igual.
  */
 async function executeDml(ctx: ServerContext, sql: string): Promise<DmlResult> {
   const statementKind = classifyDml(sql).kind;
-  // Se audita a mano porque la conexión no pasa por el chokepoint DataAccess.
-  const rowsAffected = await auditStatement(
-    sql,
-    () => runInTransaction(() => openDmlConnection(ctx.config), sql, 'commit'),
-    (rows) => rows,
-  );
+  const rowsAffected = await ctx.dataAccess.executeInTransaction(sql, 'commit');
   return { statementKind, rowsAffected };
 }
 
 /** Ejecuta el DML y lo revierte siempre: valida la sentencia sin persistir nada. */
 async function rollbackFirstDml(ctx: ServerContext, sql: string): Promise<DmlDryRunResult> {
   const detectedKind = classifyDml(sql).kind;
-  const rowsAffected = await auditStatement(
-    sql,
-    () => runInTransaction(() => openDmlConnection(ctx.config), sql, 'rollback'),
-    (rows) => rows,
-  );
+  const rowsAffected = await ctx.dataAccess.executeInTransaction(sql, 'rollback');
 
   return {
     detectedKind,

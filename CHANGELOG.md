@@ -8,7 +8,7 @@ Release inicial: puerto a TypeScript del servidor Java `mcp-oracle-db` 2.13.0, c
 
 ### Añadido
 
-- **73 tools**: sistema (1), query (2), DML (3), DDL (7), metadata núcleo (8), catálogo (21), stats del optimizador y salud (7), PL/SQL (2), explain y tuning (4), grafos y helpers (5), performance V$ (13).
+- **75 tools**: sistema (1), query (2), DML (3), DDL (7), metadata núcleo (8), catálogo (21), stats del optimizador y salud (7), PL/SQL (2), explain y tuning (4), grafos y helpers (7), performance V$ (13).
 - **4 recursos**: `oracle://audit/session/{id}`, `oracle://schema/{s}/table/{t}`, `oracle://schema/{s}/object/{o}/ddl`, `oracle://schema/{s}/plsql/{o}`.
 - **9 prompts** de guía (review-sql-performance, explain-schema, debug-invalid-plsql, safe-dml-plan, data-quality-audit, triage-database-incident, prepare-plsql-call, operating-rules, oracle-sql-style).
 - **Auditoría de sesión en Markdown** (formato `3-md`): un archivo `lu-query-<ts>-log.md` por sesión, una entrada por ejecución de tool (kind, type, duración, filas, SQL verbatim), flush por entrada y autodesactivación ante errores de I/O.

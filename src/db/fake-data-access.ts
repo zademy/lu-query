@@ -45,12 +45,14 @@ export class FakeDataAccess implements DataAccess {
     sql: string,
     binds?: OracleBind[] | OracleCallBind[],
     options?: QueryOptions,
+    outcome?: 'commit' | 'rollback',
   ): Promise<FakeReply> {
     const call: FakeCall = {
       method,
       sql,
       ...(binds === undefined ? {} : { binds }),
       ...(options === undefined ? {} : { options }),
+      ...(outcome === undefined ? {} : { outcome }),
     };
     this.calls.push(call);
 
@@ -78,6 +80,11 @@ export class FakeDataAccess implements DataAccess {
 
   async execute(sql: string, binds?: OracleBind[], options?: QueryOptions): Promise<number> {
     return (await this.answer('execute', sql, binds, options)).rowCount ?? 0;
+  }
+
+  async executeInTransaction(sql: string, outcome: 'commit' | 'rollback'): Promise<number> {
+    return (await this.answer('executeInTransaction', sql, undefined, undefined, outcome))
+      .rowCount ?? 0;
   }
 
   call(callString: string, binds?: OracleCallBind[]): Promise<OracleRow> {

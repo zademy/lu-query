@@ -37,6 +37,7 @@ export interface OracleConnection {
   close(): Promise<void>;
   /** Commit explícito: en thin `autoCommit` no persiste el DML. */
   commit(): Promise<void>;
+  rollback(): Promise<void>;
 }
 
 export interface OraclePool {

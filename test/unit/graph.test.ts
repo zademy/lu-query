@@ -134,6 +134,72 @@ describe('count_rows', () => {
   });
 });
 
+describe('get_next_sequence_value', () => {
+  it('devuelve el NEXTVAL de la secuencia del schema resuelto', async () => {
+    const dataAccess = new FakeDataAccess()
+      .on((c) => c.sql.includes('.NEXTVAL'), () => ({ rows: [{ NEXTVAL: 42 }] }));
+    const h = await graphHarness(dataAccess);
+
+    const result = await call(h, 'get_next_sequence_value', { sequence: 'EMPLOYEE_SEQ' });
+
+    expect(result.isError).toBeFalsy();
+    expect(JSON.parse(result.content[0]?.text ?? '')).toEqual({
+      schema: 'DEVUSER',
+      sequence: 'EMPLOYEE_SEQ',
+      nextValue: 42,
+    });
+    expect(dataAccess.calls[0]?.sql).toContain('"DEVUSER"."EMPLOYEE_SEQ".NEXTVAL');
+  });
+});
+
+describe('validate_fk_integrity', () => {
+  it('reporta una entrada por FK con su conteo de huerfanos', async () => {
+    const dataAccess = new FakeDataAccess()
+      .on((c) => c.sql.includes('FROM all_constraints c'), () => ({
+        rows: [
+          {
+            CONSTRAINT_NAME: 'FK_EP_EMP',
+            CHILD_COLUMNS: 'EMPLOYEE_ID',
+            PARENT_OWNER: 'DEVUSER',
+            PARENT_TABLE: 'EMPLOYEES',
+            PARENT_COLUMNS: 'EMPLOYEE_ID',
+          },
+        ],
+      }))
+      .on((c) => c.sql.includes('COUNT(*) AS orphans'), () => ({ rows: [{ ORPHANS: 3 }] }));
+    const h = await graphHarness(dataAccess);
+
+    const result = await call(h, 'validate_fk_integrity', { table: 'EMPLOYEE_PROJECTS' });
+
+    expect(result.isError).toBeFalsy();
+    expect(JSON.parse(result.content[0]?.text ?? '')).toEqual([
+      {
+        constraint_name: 'FK_EP_EMP',
+        child_columns: 'EMPLOYEE_ID',
+        parent_owner: 'DEVUSER',
+        parent_table: 'EMPLOYEES',
+        parent_columns: 'EMPLOYEE_ID',
+        orphan_count: 3,
+      },
+    ]);
+    expect(dataAccess.calls[0]?.binds).toEqual(['DEVUSER', 'EMPLOYEE_PROJECTS', null, null]);
+  });
+
+  it('filtra por constraint y pasa el nombre dos veces como bind', async () => {
+    const dataAccess = new FakeDataAccess().always(() => ({ rows: [] }));
+    const h = await graphHarness(dataAccess);
+
+    const result = await call(h, 'validate_fk_integrity', {
+      table: 'EMPLOYEE_PROJECTS',
+      constraint: 'FK_EP_EMP',
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(JSON.parse(result.content[0]?.text ?? '')).toEqual([]);
+    expect(dataAccess.calls[0]?.binds).toEqual(['DEVUSER', 'EMPLOYEE_PROJECTS', 'FK_EP_EMP', 'FK_EP_EMP']);
+  });
+});
+
 describe('find_duplicates', () => {
   it('agrupa por las columnas pedidas con umbral 2 y excluye los valores NULL', async () => {
     const dataAccess = new FakeDataAccess().always(() => ({

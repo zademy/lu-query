@@ -220,10 +220,10 @@ export async function callProcedure(
     : `${qualifiedName}(${argsPlace})`;
   const outBind = (arg: CallArg): OracleCallBind => {
     if (isCursorType(arg.dataType)) return { dir: 'OUT', type: 'CURSOR' };
-    const dir = direction(arg);
     const type = bindTypeOf(arg.dataType);
+    // Solo llegan OUT/INOUT: los IN se rutean a toBind en la construccion de binds.
+    const dir: 'OUT' | 'INOUT' = direction(arg) === 'INOUT' ? 'INOUT' : 'OUT';
     // Sin type el driver devuelve el OUT como string; NUMBER/DATE se tipan como en JDBC.
-    if (dir === 'IN') return toBind(arg.value, `'$arg.name ?? 'arg''`);
     const spec: { val?: OracleBind; dir: 'OUT' | 'INOUT'; type?: 'NUMBER' | 'DATE' | 'CURSOR' } = { dir };
     if (type !== undefined) spec.type = type;
     if (dir === 'INOUT') spec.val = toBind(arg.value, `'${arg.name ?? 'arg'}'`);

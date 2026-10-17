@@ -227,6 +227,7 @@ export function createOracleDataAccess(provider: PoolProvider): DataAccess {
     sql: string,
     binds: OracleBind[] | undefined,
     options: QueryOptions | undefined,
+    outcome: 'commit' | 'rollback' = 'commit',
   ): Promise<OracleResult> =>
     withConnection(provider, (connection, outFormat) =>
       withStatementTimeout(connection, options?.timeoutMs ?? TIMEOUTS.statementMs, async () => {
@@ -235,7 +236,8 @@ export function createOracleDataAccess(provider: PoolProvider): DataAccess {
           .catch((error: unknown) => {
             throw asDataAccessError(error, 'Oracle rechazó la sentencia');
           });
-        await connection.commit();
+        if (outcome === 'commit') await connection.commit();
+        else await connection.rollback();
         return result;
       }),
     );
@@ -250,6 +252,9 @@ export function createOracleDataAccess(provider: PoolProvider): DataAccess {
     },
     async execute(sql, binds, options) {
       return (await executeAndCommit(sql, binds, options)).rowsAffected ?? 0;
+    },
+    async executeInTransaction(sql, outcome) {
+      return (await executeAndCommit(sql, [], undefined, outcome)).rowsAffected ?? 0;
     },
     async call(callString, binds) {
       const oracledb = await loadOracle();

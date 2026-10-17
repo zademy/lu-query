@@ -72,9 +72,9 @@ export function createSentrySink(config: ResolvedConfig): SentrySink {
   try {
     Sentry.init({
       dsn,
-      // Defaults del Java (application.yaml): environment=local y release=MCP_SERVER_VERSION.
+      // Defaults del Java (application.yaml): environment=local y release=0.0.1-SNAPSHOT.
       environment: env ?? 'local',
-      release: release ?? config.serverVersion,
+      release: release ?? '0.0.1-SNAPSHOT',
       sendDefaultPii,
       beforeSend,
       // SENTRY_AUTH_TOKEN es token de build del sentry-maven-plugin en el Java y

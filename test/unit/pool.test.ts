@@ -29,10 +29,17 @@ interface Executed {
  */
 function fakeBackend(reply: (executed: Executed) => OracleResult<OracleRow> | undefined) {
   const executed: Executed[] = [];
-  const state = { breaks: 0, closed: false, callTimeout: 0 };
+  const state = { breaks: 0, closed: false, callTimeout: 0, outcomes: [] as string[] };
 
   const connection: OracleConnection = {
-    commit: () => Promise.resolve(),
+    commit() {
+      state.outcomes.push('commit');
+      return Promise.resolve();
+    },
+    rollback() {
+      state.outcomes.push('rollback');
+      return Promise.resolve();
+    },
     async execute<Row = OracleRow>(
       sql: string,
       binds?: OracleBind[],
@@ -126,6 +133,16 @@ describe('createOracleDataAccess sobre el pool', () => {
     await db.queryForList('SELECT * FROM employees', [], { maxRows: 10, timeoutMs: 5_000 });
 
     expect(executed[0]?.options).toMatchObject({ maxRows: 10 });
+  });
+
+  it('executeInTransaction confirma o revierte segun el desenlace', async () => {
+    const { provider, state } = fakeBackend(() => ({ rows: [], rowsAffected: 4 }));
+    const db = createOracleDataAccess(provider);
+
+    await expect(db.executeInTransaction('UPDATE t SET a = 1', 'commit')).resolves.toBe(4);
+    await expect(db.executeInTransaction('UPDATE t SET a = 1', 'rollback')).resolves.toBe(4);
+
+    expect(state.outcomes).toEqual(['commit', 'rollback']);
   });
 
   it('queryForObject devuelve la primera fila o null', async () => {

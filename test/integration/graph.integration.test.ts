@@ -318,3 +318,94 @@ describe.skipIf(!optIn)('grafos y data helpers contra Oracle real', () => {
     expect(implicit.edges).toEqual(explicit.edges);
   }, 60_000);
 });
+
+describe.skipIf(!optIn)('data helpers de paridad (#1) contra Oracle real', () => {
+  let handle: ServerHandle;
+  let client: Client;
+  let db: DataAccess;
+
+  beforeAll(async () => {
+    handle = createServer({ config: loadConfig({ ...GOOD_ENV, MCP_AUDIT_ENABLED: 'false' }) });
+    db = handle.context.dataAccess;
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    client = new Client({ name: 'lu-query-datahelpers-integration', version: '0.0.0' });
+    await Promise.all([handle.server.connect(serverTransport), client.connect(clientTransport)]);
+
+    await db.execute('DROP SEQUENCE T13_IT_SEQ').catch(() => undefined);
+    await db.execute('CREATE SEQUENCE T13_IT_SEQ START WITH 42');
+    await db.execute('DROP TABLE T13_IT_ORPH_CHILD PURGE').catch(() => undefined);
+    await db.execute('DROP TABLE T13_IT_ORPH_PARENT PURGE').catch(() => undefined);
+    await db.execute('CREATE TABLE T13_IT_ORPH_PARENT (ID NUMBER PRIMARY KEY)');
+    await db.execute('CREATE TABLE T13_IT_ORPH_CHILD (ID NUMBER PRIMARY KEY, PARENT_ID NUMBER)');
+    await db.execute('INSERT INTO T13_IT_ORPH_PARENT (ID) VALUES (1)');
+    await db.execute("INSERT INTO T13_IT_ORPH_CHILD (ID, PARENT_ID) VALUES (10, 1)");
+    // El huérfano (parent 99) existe ANTES de la FK: por eso se añade NOVALIDATE,
+    // que es exactamente el escenario legacy que esta tool debe detectar.
+    await db.execute("INSERT INTO T13_IT_ORPH_CHILD (ID, PARENT_ID) VALUES (11, 99)");
+    await db.execute(
+      'ALTER TABLE T13_IT_ORPH_CHILD ADD CONSTRAINT T13_IT_ORPH_FK FOREIGN KEY (PARENT_ID) REFERENCES T13_IT_ORPH_PARENT(ID) NOVALIDATE',
+    );
+  });
+
+  afterAll(async () => {
+    await db.execute('DROP SEQUENCE T13_IT_SEQ').catch(() => undefined);
+    await db.execute('DROP TABLE T13_IT_ORPH_CHILD PURGE').catch(() => undefined);
+    await db.execute('DROP TABLE T13_IT_ORPH_PARENT PURGE').catch(() => undefined);
+    await client.close();
+    await handle.close();
+  });
+
+  const call = async (name: string, args: Record<string, unknown>): Promise<ToolResult> => {
+    const result = (await client.callTool({ name, arguments: args })) as ToolResult;
+    expect(result.isError, result.content[0]?.text).toBeFalsy();
+    return result;
+  };
+
+  it('get_next_sequence_value avanza la secuencia y devuelve el valor', async () => {
+    const first = JSON.parse(
+      (await call('get_next_sequence_value', { sequence: 'T13_IT_SEQ' })).content[0]?.text ?? '',
+    );
+    const second = JSON.parse(
+      (await call('get_next_sequence_value', { sequence: 'T13_IT_SEQ' })).content[0]?.text ?? '',
+    );
+
+    expect(first.nextValue).toBe(42);
+    expect(second.nextValue).toBe(43);
+  });
+
+  it('validate_fk_integrity cuenta los huerfanos de la FK y filtra por constraint', async () => {
+    const all = JSON.parse(
+      (await call('validate_fk_integrity', { table: 'T13_IT_ORPH_CHILD' })).content[0]?.text ?? '',
+    ) as Array<{ constraint_name: string; orphan_count: number; parent_table: string }>;
+
+    expect(all).toHaveLength(1);
+    expect(all[0]?.parent_table).toBe('T13_IT_ORPH_PARENT');
+    expect(all[0]?.orphan_count).toBe(1);
+
+    const filtered = JSON.parse(
+      (await call('validate_fk_integrity', {
+        table: 'T13_IT_ORPH_CHILD',
+        constraint: all[0]?.constraint_name,
+      })).content[0]?.text ?? '',
+    ) as Array<{ orphan_count: number }>;
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]?.orphan_count).toBe(1);
+
+    const empty = JSON.parse(
+      (await call('validate_fk_integrity', {
+        table: 'T13_IT_ORPH_CHILD',
+        constraint: 'NO_EXISTE',
+      })).content[0]?.text ?? '',
+    ) as unknown[];
+    expect(empty).toEqual([]);
+  });
+
+  it('validate_fk_integrity no encuentra huerfanos en el join de ejemplo', async () => {
+    const fks = JSON.parse(
+      (await call('validate_fk_integrity', { table: JOIN_TABLE })).content[0]?.text ?? '',
+    ) as Array<{ constraint_name: string; orphan_count: number }>;
+
+    expect(fks.map((fk) => fk.constraint_name).sort()).toEqual(['FK_EP_EMP', 'FK_EP_PROJ']);
+    for (const fk of fks) expect(fk.orphan_count).toBe(0);
+  });
+});

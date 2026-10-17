@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { FakeDataAccess } from '../../src/db/fake-data-access.js';
-import { runInTransaction, type TransactionConnection } from '../../src/tools/dml.js';
 import { createHarness, type Harness } from '../helpers/harness.js';
 
 /** El SDK tipa el content como unión de bloques; estas tools devuelven texto. */
@@ -44,33 +43,6 @@ function payload(result: ToolResult): Record<string, unknown> {
   return JSON.parse(result.content[0]?.text ?? '') as Record<string, unknown>;
 }
 
-/** Conexión de mentira para runRolledBack, con la que sí rollback en el pool real. */
-function fakeConnection(rowsAffected: number) {
-  const calls: string[] = [];
-  const connection: TransactionConnection = {
-    callTimeout: 0,
-    autoCommit: true,
-    execute: () => {
-      calls.push('execute');
-      return Promise.resolve({ rows: [], rowsAffected });
-    },
-    commit: () => {
-      calls.push('commit');
-      return Promise.resolve();
-    },
-    rollback: () => {
-      calls.push('rollback');
-      return Promise.resolve();
-    },
-    breakExecution: () => Promise.resolve(),
-    close: () => {
-      calls.push('close');
-      return Promise.resolve();
-    },
-  };
-  return { connection, calls };
-}
-
 describe('tools/list · grupo Dml', () => {
   it('publica las tres tools DML con las descripciones del Java', async () => {
     const harness = await createHarness({ dataAccess: new FakeDataAccess() });
@@ -99,14 +71,35 @@ describe('tools/list · grupo Dml', () => {
 });
 
 describe('execute_dml', () => {
-  it('propaga el fallo de la transacción como resultado isError', async () => {
-    const dataAccess = new FakeDataAccess();
+  it('ejecuta por el chokepoint con commit y devuelve kind y filas', async () => {
+    const dataAccess = new FakeDataAccess().on(
+      (c) => c.method === 'executeInTransaction',
+      () => ({ rowCount: 3 }),
+    );
+
+    await withHarness(dataAccess, async (harness) => {
+      expect(payload(await call(harness, 'execute_dml', { sql: 'UPDATE nope SET a = 1' }))).toEqual({
+        statementKind: 'UPDATE',
+        rowsAffected: 3,
+      });
+    });
+
+    expect(dataAccess.calls).toEqual([
+      { method: 'executeInTransaction', sql: 'UPDATE nope SET a = 1', outcome: 'commit' },
+    ]);
+  });
+
+  it('propaga el fallo de la transaccion como resultado isError', async () => {
+    const dataAccess = new FakeDataAccess().on(
+      (c) => c.method === 'executeInTransaction',
+      () => new Error('ORA-00942: table or view does not exist'),
+    );
 
     await withHarness(dataAccess, async (harness) => {
       const result = await call(harness, 'execute_dml', { sql: 'UPDATE nope SET a = 1' });
 
       expect(result.isError).toBe(true);
-      expect(result.content[0]?.text).not.toBe('');
+      expect(result.content[0]?.text).toContain('ORA-00942');
     });
   });
 });
@@ -176,64 +169,34 @@ describe('execute_dml_preview', () => {
 });
 
 describe('execute_dml_rollback_first', () => {
-  it('devuelve isError sin pool en vez de romper el transporte', async () => {
-    const dataAccess = new FakeDataAccess();
+  it('ejecuta por el chokepoint con rollback y no persiste nada', async () => {
+    const dataAccess = new FakeDataAccess().on(
+      (c) => c.method === 'executeInTransaction',
+      () => ({ rowCount: 5 }),
+    );
 
     await withHarness(dataAccess, async (harness) => {
-      const result = await call(harness, 'execute_dml_rollback_first', {
-        sql: 'UPDATE employees SET salary = 1',
+      expect(
+        payload(
+          await call(harness, 'execute_dml_rollback_first', {
+            sql: 'UPDATE employees SET salary = 1',
+          }),
+        ),
+      ).toEqual({
+        detectedKind: 'UPDATE',
+        rowsAffected: 5,
+        rolledBack: true,
+        note: 'Statement executed and rolled back; nothing was persisted. Call execute_dml to apply the change.',
       });
-
-      expect(result.isError).toBe(true); // sin pool Oracle no hay transacción que abrir
-      expect(result.content[0]?.text).not.toBe('');
     });
+
+    expect(dataAccess.calls).toEqual([
+      {
+        method: 'executeInTransaction',
+        sql: 'UPDATE employees SET salary = 1',
+        outcome: 'rollback',
+      },
+    ]);
   });
 });
 
-describe('runInTransaction', () => {
-  it('con commit: desactiva autoCommit, ejecuta, confirma y devuelve las filas', async () => {
-    const { connection, calls } = fakeConnection(3);
-
-    await expect(
-      runInTransaction(
-        () => Promise.resolve(connection),
-        'UPDATE employees SET salary = 1',
-        'commit',
-      ),
-    ).resolves.toBe(3);
-
-    expect(connection.autoCommit).toBe(false);
-    expect(calls).toEqual(['execute', 'commit', 'close']);
-  });
-
-  it('con rollback: ejecuta, revierte y devuelve las filas', async () => {
-    const { connection, calls } = fakeConnection(5);
-
-    await expect(
-      runInTransaction(
-        () => Promise.resolve(connection),
-        'UPDATE employees SET salary = 1',
-        'rollback',
-      ),
-    ).resolves.toBe(5);
-
-    expect(connection.autoCommit).toBe(false);
-    expect(calls).toEqual(['execute', 'rollback', 'close']);
-  });
-
-  it('cierra la conexión aunque el DML falle y no confirma nada', async () => {
-    const connection: TransactionConnection = {
-      callTimeout: 0,
-      autoCommit: true,
-      execute: () => Promise.reject(new Error('ORA-00942: table or view does not exist')),
-      commit: () => Promise.resolve(),
-      rollback: () => Promise.resolve(),
-      breakExecution: () => Promise.resolve(),
-      close: () => Promise.resolve(),
-    };
-
-    await expect(
-      runInTransaction(() => Promise.resolve(connection), 'UPDATE nope SET a = 1', 'commit'),
-    ).rejects.toThrow('ORA-00942');
-  });
-});

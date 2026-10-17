@@ -2,7 +2,7 @@
 
 MCP server that exposes an Oracle database to MCP clients over **stdio**. TypeScript port with 1:1 tool parity with [mcp-oracle-db](https://www.npmjs.com/package/mcp-oracle-db) 2.13.0 (Java).
 
-**73 tools · 4 resources · 9 prompts · zero-install thin driver · per-session Markdown audit**
+**75 tools · 4 resources · 9 prompts · zero-install thin driver · per-session Markdown audit**
 
 ## Requirements
 
@@ -72,7 +72,7 @@ SELECT * FROM V$VERSION
 
 Read a session back with the resource `oracle://audit/session/{id}` (autocomplete offers `current` and recent ids). Audit disables itself on I/O errors and says so on stderr. Set `MCP_AUDIT_ENABLED=false` to turn it off. Audit files contain every statement executed — protect the directory (see [SECURITY.md](SECURITY.md)).
 
-## Tools (73)
+## Tools (75)
 
 ### System (1)
 
@@ -174,10 +174,12 @@ Read a session back with the resource `oracle://audit/session/{id}` (autocomplet
 | `list_unused_indexes` | Indexes with columns and best-effort usage info |
 | `run_sql_tuning_advisor` | DBMS_SQLTUNE report with recommendations |
 
-### Graphs & helpers (5)
+### Graphs & helpers (7)
 
 | Tool | Purpose |
 | --- | --- |
+| `get_next_sequence_value` | NEXTVAL of a sequence — side-effecting read: it advances the counter |
+| `validate_fk_integrity` | Orphan rows per FK of a table (empty list = integrity intact) |
 | `find_free_id` | Lowest free id in 1..maxRange (default 1000, cap 10000) not present in the table |
 | `find_duplicates` | Duplicate value groups in one or more columns (NULLs excluded) |
 | `count_rows` | Exact row count of a table without running SQL |

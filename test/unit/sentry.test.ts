@@ -100,7 +100,7 @@ describe('createSentrySink · inicialización', () => {
     const options = Sentry.getClient()?.getOptions();
 
     expect(options?.environment).toBe('local');
-    expect(options?.release).toBe(config.serverVersion);
+    expect(options?.release).toBe('0.0.1-SNAPSHOT');
   });
 
   it('inicializar no rompe el arranque: el transporte MCP sigue respondiendo', async () => {

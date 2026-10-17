@@ -191,6 +191,69 @@ function mermaidDeps(edges: GraphEdge[]): string {
 }
 
 /** Registra las tools de grafos y los data helpers. */
+/** CSV de columnas del diccionario: LISTAGG devuelve string, lo demas es ruido. */
+function csv(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+/**
+ * `validate_fk_integrity`: una fila por FK de la tabla con su conteo de
+ * huérfanos (`DataHelpersService.validateFkIntegrity` del Java). Lista vacía
+ * = integridad intacta. `:con` aparece dos veces, así que viaja dos
+ * veces en los binds posicionales.
+ */
+async function validateFkIntegrity(
+  dataAccess: DataAccess,
+  schema: string,
+  table: string,
+  constraint: string | null,
+): Promise<OracleRow[]> {
+  const fks = await dataAccess.queryForList(
+    `SELECT c.constraint_name AS constraint_name,
+            (SELECT LISTAGG(cc.column_name, ', ') WITHIN GROUP (ORDER BY cc.position)
+               FROM all_cons_columns cc
+              WHERE cc.owner = c.owner AND cc.constraint_name = c.constraint_name) AS child_columns,
+            c.r_owner AS parent_owner,
+            pc.table_name AS parent_table,
+            (SELECT LISTAGG(rc.column_name, ', ') WITHIN GROUP (ORDER BY rc.position)
+               FROM all_cons_columns rc
+              WHERE rc.owner = c.r_owner AND rc.constraint_name = c.r_constraint_name) AS parent_columns
+       FROM all_constraints c
+       JOIN all_constraints pc ON pc.owner = c.r_owner AND pc.constraint_name = c.r_constraint_name
+      WHERE c.owner = :own AND c.table_name = :tab
+        AND c.constraint_type = 'R'
+        AND (:con IS NULL OR c.constraint_name = :con)`,
+    [schema, table, constraint, constraint],
+  );
+
+  const results: OracleRow[] = [];
+  for (const fk of fks) {
+    // Nombres del diccionario de Oracle: vienen validados y en MAYÚSCULAS.
+    const childColumns = csv(fk.CHILD_COLUMNS).split(',').map((c) => c.trim());
+    const parentColumns = csv(fk.PARENT_COLUMNS).split(',').map((c) => c.trim());
+    const parentRef = qualifiedName(
+      str(fk, 'PARENT_OWNER') ?? schema,
+      assertIdentifier(str(fk, 'PARENT_TABLE') ?? '', 'parent_table'),
+    );
+    const cols = (alias: string, columns: string[]) =>
+      columns.map((column) => `${alias}."${column}"`).join(', ');
+    const orphanRow = await dataAccess.queryForObject(
+      `SELECT COUNT(*) AS orphans FROM ${qualifiedName(schema, table)} c
+        WHERE (${cols('c', childColumns)}) NOT IN
+              (SELECT ${cols('p', parentColumns)} FROM ${parentRef} p)`,
+    );
+    results.push({
+      constraint_name: fk.CONSTRAINT_NAME,
+      child_columns: fk.CHILD_COLUMNS,
+      parent_owner: fk.PARENT_OWNER,
+      parent_table: fk.PARENT_TABLE,
+      parent_columns: fk.PARENT_COLUMNS,
+      orphan_count: Number(orphanRow?.ORPHANS ?? 0),
+    });
+  }
+  return results;
+}
+
 export function registerGraph(ctx: ServerContext): void {
   ctx.server.registerTool(
     'find_free_id',
@@ -337,6 +400,70 @@ ORDER BY COUNT(*) DESC`,
             rowCount: row?.CNT === null || row?.CNT === undefined ? 0 : Number(row.CNT),
           };
           return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+        }),
+      ),
+  );
+
+  ctx.server.registerTool(
+    'get_next_sequence_value',
+    {
+      description:
+        'Return the NEXTVAL of a sequence. WARNING: this is a side-effecting read — calling it advances the sequence counter and the consumed value cannot be reused. When the sequence has cache > 0 the returned value may already be consumed elsewhere; before using it as a key, verify it is not already present in the target table. Use sparingly.',
+      inputSchema: {
+        schema: z
+          .string()
+          .describe(
+            "Schema (owner) of the sequence. Optional — defaults to the server's current schema; omit rather than guess.",
+          )
+          .optional(),
+        sequence: z.string().describe('Sequence name.'),
+      },
+    },
+    async (args) =>
+      withToolContext('get_next_sequence_value', args, () =>
+        guardTool(async () => {
+          const owner = await resolveSchemaFor(ctx, args.schema, 'get_next_sequence_value');
+          const sequence = assertIdentifier(args.sequence, 'sequence');
+          const row = await ctx.dataAccess.queryForObject(
+            `SELECT ${qualifiedName(owner, sequence)}.NEXTVAL AS nextval FROM dual`,
+          );
+          const result = { schema: owner, sequence, nextValue: Number(row?.NEXTVAL ?? 0) };
+          return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+        }),
+      ),
+  );
+
+  ctx.server.registerTool(
+    'validate_fk_integrity',
+    {
+      description:
+        'Check one or all foreign keys of a table and report orphan rows (child rows whose parent is missing). Returns one entry per FK with constraint name, child/parent columns and the orphan count; an empty list means referential integrity is intact.',
+      inputSchema: {
+        schema: z
+          .string()
+          .describe(
+            "Schema (owner) of the table. Optional — defaults to the server's current schema; omit rather than guess.",
+          )
+          .optional(),
+        table: z.string().describe('Table name.'),
+        constraint: z
+          .string()
+          .describe('Optional constraint-name filter; omit to check every FK on the table.')
+          .optional(),
+      },
+    },
+    async (args) =>
+      withToolContext('validate_fk_integrity', args, () =>
+        guardTool(async () => {
+          const owner = await resolveSchemaFor(ctx, args.schema, 'validate_fk_integrity');
+          const table = assertIdentifier(args.table, 'table');
+          const fks = await validateFkIntegrity(
+            ctx.dataAccess,
+            owner,
+            table,
+            blankToNull(args.constraint),
+          );
+          return { content: [{ type: 'text' as const, text: JSON.stringify(fks) }] };
         }),
       ),
   );

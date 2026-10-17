@@ -11,10 +11,11 @@ export interface QueryOptions {
 
 /** Llamada registrada por el backend fake, útil para afirmar en tests. */
 export interface DataAccessCall {
-  method: 'queryForList' | 'queryForObject' | 'execute' | 'call';
+  method: 'queryForList' | 'queryForObject' | 'execute' | 'executeInTransaction' | 'call';
   sql: string;
   binds?: OracleBind[] | OracleCallBind[];
   options?: QueryOptions;
+  outcome?: 'commit' | 'rollback';
 }
 
 /**
@@ -32,6 +33,8 @@ export interface DataAccess {
   ): Promise<OracleRow | null>;
   /** DML/DDL: devuelve las filas afectadas. */
   execute(sql: string, binds?: OracleBind[], options?: QueryOptions): Promise<number>;
+  /** DML en transacción propia: ejecuta y cierra con commit o rollback explícito. */
+  executeInTransaction(sql: string, outcome: 'commit' | 'rollback'): Promise<number>;
   /** Llamada PL/SQL: devuelve los OUT binds serializados como una fila (cursores → filas). */
   call(callString: string, binds?: OracleCallBind[]): Promise<OracleRow>;
   /** Libera el pool. Idempotente. */
@@ -64,6 +67,13 @@ export function withAudit(inner: DataAccess): DataAccess {
       return auditStatement(
         sql,
         () => inner.execute(sql, binds, options),
+        (rowsAffected) => rowsAffected,
+      );
+    },
+    executeInTransaction(sql, outcome) {
+      return auditStatement(
+        sql,
+        () => inner.executeInTransaction(sql, outcome),
         (rowsAffected) => rowsAffected,
       );
     },
