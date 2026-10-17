@@ -2,6 +2,19 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.1.0/). El número de versión de `package.json` es la fuente de verdad: el workflow de release crea el tag `v<version>` al mergear a master.
 
+## [2.16.0] - 2026-10-17
+
+### Anadido
+
+- **Skill `lu-query-audit-report`**: convierte los archivos de auditoria de sesion (Markdown) en un reporte HTML interactivo de una ventana de fechas. Pregunta el directorio y las dos fechas (dd/mm/aaaa, maximo un mes), corre `scripts/audit-report.mjs` y entrega la ruta del HTML en `<auditDir>/reports/`. Siete paneles: KPIs (sentencias, OK/ERROR, tasa de error, media y p95, filas, sesiones/dias), actividad por dia y por hora, tools por llamadas y por duracion acumulada, las 10 sentencias mas lentas con su SQL, errores agrupados por codigo ORA, reparto READ/WRITE/OTHER y una fila por sesion. Node sin dependencias: no instala nada, no consulta la base y falla con un mensaje que dice que corregir.
+- `references/template.html` de esa skill es un archivo real, no un string en el codigo: `prettier --check` lo formatea, asi que la estructura del reporte la hace cumplir la maquina. Tailwind v4 y Chart.js 4 por CDN, con la paleta y el grid de `docs/banner.png`.
+- `GLOSSARY.md`: **Reporte de auditoria** y **Ventana del reporte**; la entrada de **Archivo de auditoria de sesion** ahora precisa que hay una entrada por sentencia, no por llamada de tool.
+
+### Cambios internos
+
+- `eslint` trata `skills/**/*.mjs` como `scripts/**/*.mjs` (sin reglas tipadas: el parser se copia y corre fuera del proyecto TypeScript).
+- `test/unit/audit-report.test.ts`: 8 pruebas sobre el CLI (agregados, filtrado por ventana, `format-version` desconocida, entrada truncada, ventanas imposibles, nombre del archivo). Las fixtures se escriben con el propio `renderAuditEntry` del server, asi que el formato no puede divergir.
+
 ## [2.15.1] - 2026-10-17
 
 ### Cambios

@@ -17,7 +17,7 @@ El único paso por el que atraviesan todas las sentencias SQL del server; ahí s
 _Avoid_: repositorio, DAO, capa de datos
 
 **Archivo de auditoría de sesión**:
-Registro Markdown, uno por sesión del server, con una entrada por ejecución de tool (kind, type, duración, filas, SQL verbatim).
+Registro Markdown, uno por sesión del server, con una entrada por sentencia que atravesó el chokepoint (tool, kind, type, duración, filas, SQL verbatim).
 _Avoid_: log JSON, audit log a secas
 
 **Kind**:
@@ -47,3 +47,11 @@ _Avoid_: documentación de la API, tutorial, plugin
 **Ejemplo verificado**:
 Tool call reproducida contra una base real, con su salida real citada; se distingue de la cobertura meramente documental.
 _Avoid_: ejemplo inventado, snippet ilustrativo
+
+**Reporte de auditoría**:
+HTML autogenerado que resume las sentencias registradas en los archivos de auditoría dentro de una ventana de reporte; se produce leyendo los `.md`, sin tocar la base de datos.
+_Avoid_: dashboard, export de auditoría, informe de una ejecución
+
+**Ventana del reporte**:
+Rango de fechas en `dd/mm/aaaa`, inclusivo y de un mes como máximo, que delimita qué entradas entran al reporte de auditoría.
+_Avoid_: periodo, rango de ejecución, filtro de sesión
