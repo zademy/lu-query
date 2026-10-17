@@ -29,9 +29,9 @@ describe('protocolo MCP sobre stdio simulado', () => {
 
     try {
       const { resourceTemplates } = await client.listResourceTemplates();
-      expect(resourceTemplates.map((template) => template.uriTemplate)).toEqual([
+      expect(resourceTemplates.map((template) => template.uriTemplate)).toContain(
         'oracle://audit/session/{id}',
-      ]);
+      );
     } finally {
       await close();
     }

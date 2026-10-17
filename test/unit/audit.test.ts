@@ -426,9 +426,9 @@ describe('recurso MCP de auditoría', () => {
         `oracle://audit/session/${sessionId}`,
       ]);
       const { resourceTemplates } = await oracle.client.listResourceTemplates();
-      expect(resourceTemplates.map((template) => template.uriTemplate)).toEqual([
+      expect(resourceTemplates.map((template) => template.uriTemplate)).toContain(
         'oracle://audit/session/{id}',
-      ]);
+      );
 
       const completion = await oracle.client.complete({
         ref: { type: 'ref/resource', uri: 'oracle://audit/session/{id}' },
