@@ -6,7 +6,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write # crear la release
+  id-token: write # OIDC: npm no pide token ni codigo OTP
 
 jobs:
   release:
@@ -18,7 +19,9 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: '24' # npm exige Node >= 22.14.0 y CLI >= 11.5.1 para OIDC
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
 
       - name: Generar notas de release (estilo Spring Boot)
         run: |
@@ -38,3 +41,15 @@ jobs:
             exit 0
           fi
           gh release create "$TAG" --title "$TAG" --target "$GITHUB_SHA" --notes-file release-notes.md
+
+      - name: Dependencias
+        run: npm ci
+
+      - name: Publicar en npm con trusted publishing
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "lu-query@$VERSION" version > /dev/null 2>&1; then
+            echo "::notice::$VERSION ya esta en npm; nada que publicar."
+            exit 0
+          fi
+          npm publish # prepublishOnly ya compila dist/
