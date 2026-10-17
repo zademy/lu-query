@@ -26,6 +26,13 @@ jobs:
       - name: Dependencias
         run: npm ci
 
+      - name: Diagnostico OIDC
+        run: |
+          echo "npm=$(npm --version) node=$(node --version)"
+          echo "ACTIONS_ID_TOKEN_REQUEST_URL definido: $([ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ] && echo si || echo NO)"
+          curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN"             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org" > /tmp/oidc.json
+          node -e "const v=JSON.parse(require('fs').readFileSync('/tmp/oidc.json','utf8')).value||''; const p=v.split('.')[1]||''; console.log(JSON.stringify(JSON.parse(Buffer.from(p,'base64').toString()),null,1))"
+
       - name: Publicar en npm con trusted publishing
         run: |
           VERSION=$(node -p "require('./package.json').version")
