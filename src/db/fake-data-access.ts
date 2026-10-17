@@ -83,8 +83,9 @@ export class FakeDataAccess implements DataAccess {
   }
 
   async executeInTransaction(sql: string, outcome: 'commit' | 'rollback'): Promise<number> {
-    return (await this.answer('executeInTransaction', sql, undefined, undefined, outcome))
-      .rowCount ?? 0;
+    return (
+      (await this.answer('executeInTransaction', sql, undefined, undefined, outcome)).rowCount ?? 0
+    );
   }
 
   call(callString: string, binds?: OracleCallBind[]): Promise<OracleRow> {

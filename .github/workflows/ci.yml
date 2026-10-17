@@ -10,15 +10,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
-    name: lint + typecheck + test + build
+  test:
+    name: test (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24, 26]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ matrix.node }}
           cache: npm
 
       - run: npm ci
@@ -26,6 +30,6 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm run typecheck
-      # Unit + smoke tests: sin Oracle.
+      # Unit + smoke tests: sin Oracle (la suite integration requiere contenedor real).
       - run: npm test
       - run: npm run build

@@ -191,7 +191,10 @@ async function serializeOutBinds(
       typeof value === 'object' &&
       typeof (value as { getRows?: unknown }).getRows === 'function'
     ) {
-      const cursor = value as { getRows(max: number): Promise<OracleRow[]>; close(): Promise<void> };
+      const cursor = value as {
+        getRows(max: number): Promise<OracleRow[]>;
+        close(): Promise<void>;
+      };
       row[key] = (await cursor.getRows(MAX_ROWS)) ?? [];
       await cursor.close().catch(() => undefined);
     } else {

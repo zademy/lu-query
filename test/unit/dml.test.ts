@@ -78,10 +78,12 @@ describe('execute_dml', () => {
     );
 
     await withHarness(dataAccess, async (harness) => {
-      expect(payload(await call(harness, 'execute_dml', { sql: 'UPDATE nope SET a = 1' }))).toEqual({
-        statementKind: 'UPDATE',
-        rowsAffected: 3,
-      });
+      expect(payload(await call(harness, 'execute_dml', { sql: 'UPDATE nope SET a = 1' }))).toEqual(
+        {
+          statementKind: 'UPDATE',
+          rowsAffected: 3,
+        },
+      );
     });
 
     expect(dataAccess.calls).toEqual([
@@ -199,4 +201,3 @@ describe('execute_dml_rollback_first', () => {
     ]);
   });
 });
-

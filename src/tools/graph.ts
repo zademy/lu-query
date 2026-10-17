@@ -229,8 +229,12 @@ async function validateFkIntegrity(
   const results: OracleRow[] = [];
   for (const fk of fks) {
     // Nombres del diccionario de Oracle: vienen validados y en MAYÚSCULAS.
-    const childColumns = csv(fk.CHILD_COLUMNS).split(',').map((c) => c.trim());
-    const parentColumns = csv(fk.PARENT_COLUMNS).split(',').map((c) => c.trim());
+    const childColumns = csv(fk.CHILD_COLUMNS)
+      .split(',')
+      .map((c) => c.trim());
+    const parentColumns = csv(fk.PARENT_COLUMNS)
+      .split(',')
+      .map((c) => c.trim());
     const parentRef = qualifiedName(
       str(fk, 'PARENT_OWNER') ?? schema,
       assertIdentifier(str(fk, 'PARENT_TABLE') ?? '', 'parent_table'),

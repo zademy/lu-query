@@ -136,8 +136,10 @@ describe('count_rows', () => {
 
 describe('get_next_sequence_value', () => {
   it('devuelve el NEXTVAL de la secuencia del schema resuelto', async () => {
-    const dataAccess = new FakeDataAccess()
-      .on((c) => c.sql.includes('.NEXTVAL'), () => ({ rows: [{ NEXTVAL: 42 }] }));
+    const dataAccess = new FakeDataAccess().on(
+      (c) => c.sql.includes('.NEXTVAL'),
+      () => ({ rows: [{ NEXTVAL: 42 }] }),
+    );
     const h = await graphHarness(dataAccess);
 
     const result = await call(h, 'get_next_sequence_value', { sequence: 'EMPLOYEE_SEQ' });
@@ -155,18 +157,24 @@ describe('get_next_sequence_value', () => {
 describe('validate_fk_integrity', () => {
   it('reporta una entrada por FK con su conteo de huerfanos', async () => {
     const dataAccess = new FakeDataAccess()
-      .on((c) => c.sql.includes('FROM all_constraints c'), () => ({
-        rows: [
-          {
-            CONSTRAINT_NAME: 'FK_EP_EMP',
-            CHILD_COLUMNS: 'EMPLOYEE_ID',
-            PARENT_OWNER: 'DEVUSER',
-            PARENT_TABLE: 'EMPLOYEES',
-            PARENT_COLUMNS: 'EMPLOYEE_ID',
-          },
-        ],
-      }))
-      .on((c) => c.sql.includes('COUNT(*) AS orphans'), () => ({ rows: [{ ORPHANS: 3 }] }));
+      .on(
+        (c) => c.sql.includes('FROM all_constraints c'),
+        () => ({
+          rows: [
+            {
+              CONSTRAINT_NAME: 'FK_EP_EMP',
+              CHILD_COLUMNS: 'EMPLOYEE_ID',
+              PARENT_OWNER: 'DEVUSER',
+              PARENT_TABLE: 'EMPLOYEES',
+              PARENT_COLUMNS: 'EMPLOYEE_ID',
+            },
+          ],
+        }),
+      )
+      .on(
+        (c) => c.sql.includes('COUNT(*) AS orphans'),
+        () => ({ rows: [{ ORPHANS: 3 }] }),
+      );
     const h = await graphHarness(dataAccess);
 
     const result = await call(h, 'validate_fk_integrity', { table: 'EMPLOYEE_PROJECTS' });
@@ -196,7 +204,12 @@ describe('validate_fk_integrity', () => {
 
     expect(result.isError).toBeFalsy();
     expect(JSON.parse(result.content[0]?.text ?? '')).toEqual([]);
-    expect(dataAccess.calls[0]?.binds).toEqual(['DEVUSER', 'EMPLOYEE_PROJECTS', 'FK_EP_EMP', 'FK_EP_EMP']);
+    expect(dataAccess.calls[0]?.binds).toEqual([
+      'DEVUSER',
+      'EMPLOYEE_PROJECTS',
+      'FK_EP_EMP',
+      'FK_EP_EMP',
+    ]);
   });
 });
 

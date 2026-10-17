@@ -31,7 +31,6 @@ export function beforeSend(event: Sentry.ErrorEvent): Sentry.ErrorEvent | null {
 
 /** Sink apagado: mismo contrato, cero coste y cero red. */
 function disabledSink(): SentrySink {
-
   return { enabled: false, captureException: () => {}, captureMessage: () => {} };
 }
 

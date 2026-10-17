@@ -26,7 +26,11 @@ function optionalSchema(owner: string) {
 }
 
 /** Schema efectivo: el pedido gana; si no, el configurado (o error si no hay). */
-async function owner(ctx: ServerContext, requested: string | undefined, tool: string): Promise<string> {
+async function owner(
+  ctx: ServerContext,
+  requested: string | undefined,
+  tool: string,
+): Promise<string> {
   return resolveSchemaFor(ctx, requested, tool);
 }
 

@@ -144,7 +144,6 @@ function requireSupportedType(oracleType: unknown, label: string): void {
   }
 }
 
-
 /** Valor IN bindeable; los contenedores JSON no lo son. */
 function toBind(value: unknown, label: string): OracleBind {
   if (
@@ -194,7 +193,6 @@ export async function callProcedure(
   }
   for (const arg of parsed) requireSupportedType(arg.dataType, `argument '${arg.name ?? ''}'`);
 
-
   const qualifiedName = qualified(schema, name);
   const ins = parsed.filter((arg) => direction(arg) !== 'OUT');
   const outs = parsed.filter((arg) => direction(arg) !== 'IN');
@@ -224,7 +222,9 @@ export async function callProcedure(
     // Solo llegan OUT/INOUT: los IN se rutean a toBind en la construccion de binds.
     const dir: 'OUT' | 'INOUT' = direction(arg) === 'INOUT' ? 'INOUT' : 'OUT';
     // Sin type el driver devuelve el OUT como string; NUMBER/DATE se tipan como en JDBC.
-    const spec: { val?: OracleBind; dir: 'OUT' | 'INOUT'; type?: 'NUMBER' | 'DATE' | 'CURSOR' } = { dir };
+    const spec: { val?: OracleBind; dir: 'OUT' | 'INOUT'; type?: 'NUMBER' | 'DATE' | 'CURSOR' } = {
+      dir,
+    };
     if (type !== undefined) spec.type = type;
     if (dir === 'INOUT') spec.val = toBind(arg.value, `'${arg.name ?? 'arg'}'`);
     return spec;

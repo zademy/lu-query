@@ -79,21 +79,21 @@ describe('guardTool', () => {
   });
 });
 
-  it('reporta el error de tool al sink de Sentry antes de devolverlo', async () => {
-    const fallo = new DataAccessError('ORA-00942: table or view does not exist', 'ORA-00942');
+it('reporta el error de tool al sink de Sentry antes de devolverlo', async () => {
+  const fallo = new DataAccessError('ORA-00942: table or view does not exist', 'ORA-00942');
 
-    const resultado = await guardTool(() => Promise.reject(fallo));
+  const resultado = await guardTool(() => Promise.reject(fallo));
 
-    expect(resultado.isError).toBe(true);
-    // con Sentry apagado reportar es un no-op: la tool no se cae nunca
-    expect(() => reportToolError(fallo)).not.toThrow();
-  });
+  expect(resultado.isError).toBe(true);
+  // con Sentry apagado reportar es un no-op: la tool no se cae nunca
+  expect(() => reportToolError(fallo)).not.toThrow();
+});
 
-  it('corta la request MCP al superar TIMEOUTS.requestMs y devuelve isError', async () => {
-    const colgado = new Promise<never>(() => {});
+it('corta la request MCP al superar TIMEOUTS.requestMs y devuelve isError', async () => {
+  const colgado = new Promise<never>(() => {});
 
-    const result = await guardTool(() => colgado, 10);
+  const result = await guardTool(() => colgado, 10);
 
-    expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toContain('timeout de request MCP');
-  });
+  expect(result.isError).toBe(true);
+  expect(result.content[0]?.text).toContain('timeout de request MCP');
+});

@@ -338,10 +338,10 @@ describe.skipIf(!optIn)('data helpers de paridad (#1) contra Oracle real', () =>
     await db.execute('CREATE TABLE T13_IT_ORPH_PARENT (ID NUMBER PRIMARY KEY)');
     await db.execute('CREATE TABLE T13_IT_ORPH_CHILD (ID NUMBER PRIMARY KEY, PARENT_ID NUMBER)');
     await db.execute('INSERT INTO T13_IT_ORPH_PARENT (ID) VALUES (1)');
-    await db.execute("INSERT INTO T13_IT_ORPH_CHILD (ID, PARENT_ID) VALUES (10, 1)");
+    await db.execute('INSERT INTO T13_IT_ORPH_CHILD (ID, PARENT_ID) VALUES (10, 1)');
     // El huérfano (parent 99) existe ANTES de la FK: por eso se añade NOVALIDATE,
     // que es exactamente el escenario legacy que esta tool debe detectar.
-    await db.execute("INSERT INTO T13_IT_ORPH_CHILD (ID, PARENT_ID) VALUES (11, 99)");
+    await db.execute('INSERT INTO T13_IT_ORPH_CHILD (ID, PARENT_ID) VALUES (11, 99)');
     await db.execute(
       'ALTER TABLE T13_IT_ORPH_CHILD ADD CONSTRAINT T13_IT_ORPH_FK FOREIGN KEY (PARENT_ID) REFERENCES T13_IT_ORPH_PARENT(ID) NOVALIDATE',
     );
@@ -383,19 +383,23 @@ describe.skipIf(!optIn)('data helpers de paridad (#1) contra Oracle real', () =>
     expect(all[0]?.orphan_count).toBe(1);
 
     const filtered = JSON.parse(
-      (await call('validate_fk_integrity', {
-        table: 'T13_IT_ORPH_CHILD',
-        constraint: all[0]?.constraint_name,
-      })).content[0]?.text ?? '',
+      (
+        await call('validate_fk_integrity', {
+          table: 'T13_IT_ORPH_CHILD',
+          constraint: all[0]?.constraint_name,
+        })
+      ).content[0]?.text ?? '',
     ) as Array<{ orphan_count: number }>;
     expect(filtered).toHaveLength(1);
     expect(filtered[0]?.orphan_count).toBe(1);
 
     const empty = JSON.parse(
-      (await call('validate_fk_integrity', {
-        table: 'T13_IT_ORPH_CHILD',
-        constraint: 'NO_EXISTE',
-      })).content[0]?.text ?? '',
+      (
+        await call('validate_fk_integrity', {
+          table: 'T13_IT_ORPH_CHILD',
+          constraint: 'NO_EXISTE',
+        })
+      ).content[0]?.text ?? '',
     ) as unknown[];
     expect(empty).toEqual([]);
   });

@@ -352,7 +352,7 @@ export function registerPerformance(ctx: ServerContext): void {
   vTool(
     ctx,
     'list_top_sql',
-    "Top-N SQL statements ordered by buffer_gets (default), disk_reads, elapsed_time, executions or cpu_time. Returns sql_id, executions, gets/reads/elapsed and a 200-char SQL preview.",
+    'Top-N SQL statements ordered by buffer_gets (default), disk_reads, elapsed_time, executions or cpu_time. Returns sql_id, executions, gets/reads/elapsed and a 200-char SQL preview.',
     {
       orderBy: z
         .string()
