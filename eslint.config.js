@@ -2,7 +2,15 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'coverage/**', 'node_modules/**', 'mcp-audit-logs/**'],
+    ignores: [
+      'dist/**',
+      'coverage/**',
+      'node_modules/**',
+      'mcp-audit-logs/**',
+      'video/**',
+      // Skills de agente: documentacion y assets vendorizados, no codigo del paquete.
+      '.agents/**',
+    ],
   },
   ...tseslint.configs.recommendedTypeChecked,
   {
