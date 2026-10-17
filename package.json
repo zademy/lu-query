@@ -24,7 +24,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "banner": "\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless --disable-gpu --hide-scrollbars --force-device-scale-factor=2 --window-size=1600,600 --screenshot=docs/banner.png scripts/banner.html"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.0",
