@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reporte de auditoría · lu-query</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style type="text/tailwindcss">
+      @theme {
+        --color-bg: #0b0d11;
+        --color-grid: #171a21;
+        --color-ink: #eef1f6;
+        --color-muted: #8b93a3;
+        --color-faint: #5a6273;
+        --color-teal: #5ee0d0;
+        --color-alert: #f0524b;
+        --color-amber: #f5c451;
+        --color-card: #12151b;
+        --color-line: #232833;
+        --font-sans: -apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+        --font-mono: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+      }
+    </style>
+    <style>
+      body {
+        background-color: var(--color-bg);
+        background-image:
+          linear-gradient(var(--color-grid) 1px, transparent 1px) 0 0 / 80px 80px,
+          linear-gradient(90deg, var(--color-grid) 1px, transparent 1px) 0 0 / 80px 80px,
+          radial-gradient(1200px 600px at 78% 0%, #161b24 0%, transparent 60%);
+        background-attachment: fixed;
+        color: var(--color-ink);
+        font-family: var(--font-sans);
+        min-height: 100vh;
+      }
+      pre {
+        font-family: var(--font-mono);
+      }
+      details > summary {
+        cursor: pointer;
+        list-style: none;
+      }
+      details > summary::-webkit-details-marker {
+        display: none;
+      }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  </head>
+  <body class="text-ink">
+    <main class="mx-auto max-w-7xl px-6 py-10">
+      <header class="mb-8">
+        <p class="font-mono text-xs tracking-[0.2em] text-teal uppercase">lu-query</p>
+        <h1 class="mt-2 text-3xl font-semibold">Reporte de auditoría</h1>
+        <p class="mt-2 text-muted" id="window"></p>
+        <dl
+          class="mt-4 grid gap-x-8 gap-y-1 text-sm text-faint sm:grid-cols-2"
+          id="provenance"
+        ></dl>
+      </header>
+
+      <section
+        id="banners"
+        class="mb-8 hidden space-y-2 rounded-lg border border-line bg-card p-4 text-sm"
+      ></section>
+
+      <section class="mb-10 grid grid-cols-2 gap-3 md:grid-cols-4" id="kpis"></section>
+
+      <section class="mb-10 grid gap-4 lg:grid-cols-2">
+        <div class="rounded-lg border border-line bg-card p-5">
+          <h2 class="text-sm font-medium text-muted">Actividad por día</h2>
+          <div class="mt-4 h-64"><canvas id="chart-days"></canvas></div>
+        </div>
+        <div class="rounded-lg border border-line bg-card p-5">
+          <h2 class="text-sm font-medium text-muted">Actividad por hora</h2>
+          <div class="mt-4 h-64"><canvas id="chart-hours"></canvas></div>
+        </div>
+        <div class="rounded-lg border border-line bg-card p-5">
+          <h2 class="text-sm font-medium text-muted">Tools más llamadas</h2>
+          <div class="mt-4 h-72"><canvas id="chart-tool-calls"></canvas></div>
+        </div>
+        <div class="rounded-lg border border-line bg-card p-5">
+          <h2 class="text-sm font-medium text-muted">Tools que más tiempo consumieron</h2>
+          <div class="mt-4 h-72"><canvas id="chart-tool-time"></canvas></div>
+        </div>
+        <div class="rounded-lg border border-line bg-card p-5">
+          <h2 class="text-sm font-medium text-muted">Efecto sobre los datos (type)</h2>
+          <div class="mt-4 h-72"><canvas id="chart-types"></canvas></div>
+        </div>
+        <div class="rounded-lg border border-line bg-card p-5">
+          <h2 class="text-sm font-medium text-muted">Errores por código ORA</h2>
+          <div class="mt-4 h-72"><canvas id="chart-errors"></canvas></div>
+        </div>
+      </section>
+
+      <section class="mb-10 space-y-4">
+        <h2 class="text-lg font-medium">Las 10 sentencias más lentas</h2>
+        <div class="overflow-x-auto rounded-lg border border-line bg-card">
+          <table class="w-full text-sm">
+            <thead class="text-left text-faint">
+              <tr>
+                <th class="px-4 py-3 font-normal">Inicio</th>
+                <th class="px-4 py-3 font-normal">Tool</th>
+                <th class="px-4 py-3 font-normal">Kind</th>
+                <th class="px-4 py-3 font-normal">Type</th>
+                <th class="px-4 py-3 text-right font-normal">Filas</th>
+                <th class="px-4 py-3 text-right font-normal">Duración</th>
+                <th class="px-4 py-3 font-normal">SQL</th>
+              </tr>
+            </thead>
+            <tbody id="table-slowest"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="mb-10 space-y-4">
+        <h2 class="text-lg font-medium">Errores</h2>
+        <div class="overflow-x-auto rounded-lg border border-line bg-card">
+          <table class="w-full text-sm">
+            <thead class="text-left text-faint">
+              <tr>
+                <th class="px-4 py-3 font-normal">Código</th>
+                <th class="px-4 py-3 text-right font-normal">Veces</th>
+                <th class="px-4 py-3 font-normal">Tool</th>
+                <th class="px-4 py-3 font-normal">Mensaje de ejemplo</th>
+              </tr>
+            </thead>
+            <tbody id="table-errors"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="mb-10 space-y-4">
+        <h2 class="text-lg font-medium">Sesiones</h2>
+        <div class="overflow-x-auto rounded-lg border border-line bg-card">
+          <table class="w-full text-sm">
+            <thead class="text-left text-faint">
+              <tr>
+                <th class="px-4 py-3 font-normal">Session id</th>
+                <th class="px-4 py-3 font-normal">Inicio</th>
+                <th class="px-4 py-3 font-normal">Zona</th>
+                <th class="px-4 py-3 text-right font-normal">Sentencias</th>
+                <th class="px-4 py-3 text-right font-normal">Errores</th>
+                <th class="px-4 py-3 text-right font-normal">Duración</th>
+                <th class="px-4 py-3 font-normal">Archivo</th>
+              </tr>
+            </thead>
+            <tbody id="table-sessions"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer class="border-t border-line pt-6 text-xs text-faint">
+        <p>
+          Generado por la skill <span class="font-mono">lu-query-audit-report</span> leyendo
+          archivos de auditoría de sesión (<span class="font-mono">format-version</span>
+          <span id="format-version"></span>). No consultó la base de datos.
+        </p>
+        <p class="mt-2 text-amber">
+          Contiene literales del SQL que ejecutó el servidor: trátalo como un documento interno y no
+          lo publiques ni lo agregues a un repositorio sin revisarlo.
+        </p>
+      </footer>
+    </main>
+
+    <!--lu-data-->
+
+    <script>
+      const data = JSON.parse(document.getElementById('lu-data').textContent);
+      const totals = data.totals;
+      const meta = data.meta;
+      const $ = (id) => document.getElementById(id);
+      const num = (n) => n.toLocaleString('es-MX');
+      const ms = (n) => (n >= 1000 ? (n / 1000).toFixed(2) + ' s' : n + ' ms');
+      const cell = (tag, text, className) => {
+        const node = document.createElement(tag);
+        node.textContent = text;
+        if (className) node.className = className;
+        return node;
+      };
+      const row = (cells) => {
+        const tr = document.createElement('tr');
+        tr.className = 'border-t border-line';
+        for (const [text, className] of cells)
+          tr.append(cell('td', text, 'px-4 py-3 ' + (className || '')));
+        return tr;
+      };
+      const sqlCell = (sql) => {
+        const td = document.createElement('td');
+        td.className = 'px-4 py-3';
+        const details = document.createElement('details');
+        const summary = cell('summary', 'ver SQL', 'text-teal text-xs');
+        const pre = document.createElement('pre');
+        pre.className = 'mt-2 max-h-48 overflow-auto rounded bg-bg p-3 text-xs whitespace-pre-wrap';
+        pre.textContent = sql;
+        details.append(summary, pre);
+        td.append(details);
+        return td;
+      };
+      const empty = (tbody, colspan, text) => {
+        const tr = document.createElement('tr');
+        const td = cell('td', text, 'px-4 py-6 text-faint');
+        td.colSpan = colspan;
+        tr.append(td);
+        tbody.append(tr);
+      };
+
+      $('window').textContent =
+        'Del ' + meta.from + ' al ' + meta.to + ' · ' + totals.statements + ' sentencias';
+      $('provenance').append(
+        Object.assign(document.createElement('dt'), { textContent: 'Directorio de auditoría' }),
+        Object.assign(document.createElement('dd'), {
+          className: 'font-mono text-muted break-all',
+          textContent: meta.auditDir,
+        }),
+        Object.assign(document.createElement('dt'), { textContent: 'Generado' }),
+        Object.assign(document.createElement('dd'), {
+          className: 'text-muted',
+          textContent: meta.generatedAt + ' (' + meta.timezone + ')',
+        }),
+        Object.assign(document.createElement('dt'), { textContent: 'Archivos leídos' }),
+        Object.assign(document.createElement('dd'), {
+          className: 'text-muted',
+          textContent:
+            meta.filesRead +
+            ' leídos, ' +
+            meta.filesUnreadable +
+            ' ilegibles, ' +
+            meta.entriesDropped +
+            ' entradas incompletas descartadas',
+        }),
+      );
+      $('format-version').textContent = meta.formatVersion;
+
+      if (meta.unreadable.length || meta.dropped.length) {
+        const banners = $('banners');
+        banners.classList.remove('hidden');
+        for (const item of meta.unreadable.concat(meta.dropped)) {
+          banners.append(
+            cell(
+              'p',
+              'Omitido: ' + item.file + ' — ' + item.reason,
+              'rounded border border-line px-3 py-2 text-muted',
+            ),
+          );
+        }
+      }
+
+      const kpis = [
+        ['Sentencias', num(totals.statements), ''],
+        ['OK', num(totals.ok), 'text-teal'],
+        ['Errores', num(totals.errors), totals.errors ? 'text-alert' : 'text-muted'],
+        ['Tasa de error', totals.errorRate + ' %', totals.errorRate ? 'text-alert' : 'text-teal'],
+        ['Filas devueltas', num(totals.rows), ''],
+        ['Duración media', ms(totals.durationAvgMs), ''],
+        ['Duración p95', ms(totals.durationP95Ms), ''],
+        ['Sesiones · días', totals.sessions + ' · ' + totals.days, ''],
+      ];
+      for (const [label, value, tone] of kpis) {
+        const card = document.createElement('div');
+        card.className = 'rounded-lg border border-line bg-card p-4';
+        card.append(
+          cell('p', label, 'text-xs tracking-wide text-faint uppercase'),
+          cell('p', value, 'mt-2 text-2xl font-semibold ' + (tone || 'text-ink')),
+        );
+        $('kpis').append(card);
+      }
+
+      Chart.defaults.color = '#8b93a3';
+      Chart.defaults.borderColor = '#232833';
+      Chart.defaults.font.family = "-apple-system, 'SF Pro Text', sans-serif";
+      Chart.defaults.maintainAspectRatio = false;
+
+      // El legend se apaga por defecto: en un solo dataset solo ocupa espacio.
+      const bar = (canvas, config, showLegend = false) =>
+        new Chart(canvas, {
+          ...config,
+          options: {
+            ...config.options,
+            plugins: {
+              ...config.options?.plugins,
+              legend: { display: showLegend, labels: { boxWidth: 10 } },
+            },
+          },
+        });
+      const topTools = data.byTool.slice(0, 12);
+      const horizontal = (id, labels, values, color) =>
+        bar($(id), {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{ data: values, backgroundColor: color, borderRadius: 4 }],
+          },
+          options: {
+            indexAxis: 'y',
+            scales: { x: { beginAtZero: true }, y: { ticks: { autoSkip: false } } },
+          },
+        });
+
+      if (data.byDay.length > 0) {
+        bar(
+          $('chart-days'),
+          {
+            type: 'line',
+            data: {
+              labels: data.byDay.map((d) => d.label),
+              datasets: [
+                {
+                  label: 'Sentencias',
+                  data: data.byDay.map((d) => d.statements),
+                  borderColor: '#5ee0d0',
+                  backgroundColor: 'rgba(94, 224, 208, 0.12)',
+                  fill: true,
+                  tension: 0.3,
+                  pointRadius: 3,
+                },
+                {
+                  label: 'Errores',
+                  data: data.byDay.map((d) => d.errors),
+                  borderColor: '#f0524b',
+                  backgroundColor: 'rgba(240, 82, 75, 0.15)',
+                  tension: 0.3,
+                  pointRadius: 3,
+                },
+              ],
+            },
+            options: {
+              plugins: { legend: {} },
+              scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+            },
+          },
+          true,
+        );
+      }
+
+      bar($('chart-hours'), {
+        type: 'bar',
+        data: {
+          labels: data.byHour.map((h) => h.label),
+          datasets: [
+            {
+              label: 'Sentencias',
+              data: data.byHour.map((h) => h.statements),
+              backgroundColor: '#5ee0d0',
+              borderRadius: 4,
+            },
+          ],
+        },
+        options: {
+          scales: {
+            x: { ticks: { autoSkip: false } },
+            y: { beginAtZero: true, ticks: { precision: 0 } },
+          },
+        },
+      });
+
+      if (topTools.length > 0) {
+        horizontal(
+          'chart-tool-calls',
+          topTools.map((t) => t.tool),
+          topTools.map((t) => t.calls),
+          '#5ee0d0',
+        );
+        horizontal(
+          'chart-tool-time',
+          topTools.map((t) => t.tool),
+          topTools.map((t) => t.totalMs),
+          '#7aa2f7',
+        );
+      }
+
+      if (data.byType.length > 0) {
+        new Chart($('chart-types'), {
+          type: 'doughnut',
+          data: {
+            labels: data.byType.map((t) => t.type),
+            datasets: [
+              {
+                data: data.byType.map((t) => t.statements),
+                backgroundColor: ['#5ee0d0', '#f5c451', '#7aa2f7'],
+                borderColor: '#12151b',
+              },
+            ],
+          },
+          options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 10 } } } },
+        });
+      }
+
+      if (data.errors.length > 0) {
+        horizontal(
+          'chart-errors',
+          data.errors.map((e) => e.code),
+          data.errors.map((e) => e.count),
+          '#f0524b',
+        );
+      }
+
+      const slowest = $('table-slowest');
+      if (data.slowest.length === 0) {
+        empty(slowest, 7, 'Ninguna sentencia en la ventana.');
+      } else {
+        for (const row_ of data.slowest) {
+          const tr = document.createElement('tr');
+          tr.className = 'border-t border-line';
+          tr.append(
+            cell('td', row_.startedAt, 'px-4 py-3 font-mono text-xs text-muted'),
+            cell('td', row_.tool, 'px-4 py-3'),
+            cell('td', row_.kind, 'px-4 py-3 text-muted'),
+            cell('td', row_.type, 'px-4 py-3 text-muted'),
+            cell('td', num(row_.rows), 'px-4 py-3 text-right'),
+            cell('td', ms(row_.durationMs), 'px-4 py-3 text-right text-amber'),
+            sqlCell(row_.sql),
+          );
+          slowest.append(tr);
+        }
+      }
+
+      const errors = $('table-errors');
+      if (data.errors.length === 0) {
+        empty(errors, 4, 'Sin errores en la ventana.');
+      } else {
+        for (const error of data.errors)
+          errors.append(
+            row([
+              [error.code, 'font-mono text-alert'],
+              [num(error.count), 'text-right'],
+              [error.tool, 'text-muted'],
+              [error.sample, 'text-muted break-all'],
+            ]),
+          );
+      }
+
+      const sessions = $('table-sessions');
+      if (data.sessions.length === 0) {
+        empty(sessions, 7, 'Ninguna sesión en la ventana.');
+      } else {
+        for (const session of data.sessions) {
+          sessions.append(
+            row([
+              [session.sessionId, 'font-mono text-xs whitespace-nowrap'],
+              [session.startedAt, 'text-muted'],
+              [session.timezone, 'text-faint'],
+              [num(session.statements), 'text-right'],
+              [num(session.errors), 'text-right ' + (session.errors ? 'text-alert' : 'text-muted')],
+              [ms(session.durationMs), 'text-right'],
+              [session.file, 'font-mono text-xs text-faint break-all'],
+            ]),
+          );
+        }
+      }
+    </script>
+  </body>
+</html>

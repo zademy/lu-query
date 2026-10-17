@@ -29,8 +29,9 @@ export default tseslint.config(
   },
   {
     // eslint.config.js es JS plano: no entra al proyecto de tsconfig.
-    // scripts/*.mjs tampoco (utilerías de CI, con self-test propio).
-    files: ['**/*.js', 'scripts/**/*.mjs'],
+    // scripts/*.mjs tampoco (utilerías de CI, con self-test propio), ni el
+    // parser de la skill de reportes: se copian y corren fuera del paquete.
+    files: ['**/*.js', 'scripts/**/*.mjs', 'skills/**/*.mjs'],
     extends: [tseslint.configs.disableTypeChecked],
   },
   {

@@ -1,6 +1,6 @@
 {
   "name": "lu-query",
-  "version": "2.15.1",
+  "version": "2.16.0",
   "description": "MCP server for Oracle DB over stdio (1:1 port of mcp-oracle-db 2.13.0)",
   "license": "MIT",
   "author": "Sadot Hern\u00e1ndez Moreno",

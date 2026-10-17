@@ -2,14 +2,14 @@
 
 Optional, copyable skill folders that teach an AI agent how to use the **lu-query** MCP server well: which tool to reach for, in what order, what mutates, how failures are reported, and how to produce evidence.
 
-They are documentation, not code: `lu-query` itself never installs them, so nothing changes for existing users.
+They are documentation, not code: `lu-query` itself never installs them, so nothing changes for existing users. One of them ([lu-query-audit-report](lu-query-audit-report/SKILL.md)) carries a dependency-free Node script that renders the audit trail as an HTML report; it runs only when an agent asks for a report, and it needs no build step.
 
 ## Install (optional)
 
 With the [`skills`](https://www.npmjs.com/package/skills) CLI - it discovers every skill in this repo and puts it where your agent looks:
 
 ```bash
-npx skills@latest add zademy/lu-query                        # all eight skills
+npx skills@latest add zademy/lu-query                        # all nine skills
 npx skills@latest add zademy/lu-query --list                 # show them without installing
 npx skills@latest add zademy/lu-query -s lu-query-use-plsql # just one
 npx skills@latest add zademy/lu-query -g -a opencode        # global, for OpenCode
@@ -43,6 +43,7 @@ Nothing else is required: the skills reference the MCP server by tool name, so t
 | [lu-query-use-plsql](lu-query-use-plsql/SKILL.md)                   | Read and call procedures/functions, OUT params, cursors     | `describe_plsql`, `call_procedure`, `get_plsql_errors`   |
 | [lu-query-tune-sql](lu-query-tune-sql/SKILL.md)                     | Slow SQL: plan, statistics, index and advisor advice        | 4 explain/tuning + 3 stats                               |
 | [lu-query-triage-incident](lu-query-triage-incident/SKILL.md)       | "Is the DB healthy? Who blocks whom?"                       | 13 performance + health + session                        |
+| [lu-query-audit-report](lu-query-audit-report/SKILL.md)             | "What was executed over a period?" interactive HTML report  | reads the audit Markdown, no MCP tool                    |
 
 ## Rules that apply to every skill
 

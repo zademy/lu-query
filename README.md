@@ -290,10 +290,10 @@ Requires `SELECT ANY DICTIONARY` (or equivalent) on the database user; tools ret
 
 ## Agent skills (optional)
 
-Eight task-based skills that teach an agent how to use these 75 tools well - which tool for which job, in what order, what mutates, how failures look, how to read results. Install them with the [`skills`](https://www.npmjs.com/package/skills) CLI, which puts each skill where your agent looks for them:
+Nine task-based skills. Eight teach an agent how to use these 75 tools well - which tool for which job, in what order, what mutates, how failures look, how to read results. The ninth turns the audit trail into an interactive HTML report. Install them with the [`skills`](https://www.npmjs.com/package/skills) CLI, which puts each skill where your agent looks for them:
 
 ```bash
-npx skills@latest add zademy/lu-query           # install the eight skills
+npx skills@latest add zademy/lu-query           # install the nine skills
 npx skills@latest add zademy/lu-query --list    # just show them
 ```
 
@@ -305,6 +305,7 @@ No CLI? Copy them by hand - each folder is self-contained (`SKILL.md` + `referen
 cp -r node_modules/lu-query/skills/lu-query-* ~/.claude/skills/   # Claude Code and OpenCode
 ```
 
+Skills: `lu-query-explore-schema`, `lu-query-query-data`, `lu-query-audit-data-quality`, `lu-query-plan-data-changes`, `lu-query-manage-schema`, `lu-query-use-plsql`, `lu-query-tune-sql`, `lu-query-triage-incident`, `lu-query-audit-report`. Catalog and examples provenance: [`skills/README.md`](https://github.com/zademy/lu-query/blob/master/skills/README.md). Installing the server never installs skills on its own.
 Skills: `lu-query-explore-schema`, `lu-query-query-data`, `lu-query-audit-data-quality`, `lu-query-plan-data-changes`, `lu-query-manage-schema`, `lu-query-use-plsql`, `lu-query-tune-sql`, `lu-query-triage-incident`. Catalog and examples provenance: [`skills/README.md`](https://github.com/zademy/lu-query/blob/master/skills/README.md). Installing the server never installs skills on its own.
 
 ## Security
