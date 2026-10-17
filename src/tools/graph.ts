@@ -29,7 +29,9 @@ export interface SchemaGraph {
 /** Oracle devuelve las etiquetas de columna en MAYÚSCULAS si el alias no va entrecomillado. */
 function str(row: OracleRow, key: string): string | null {
   const value = row[key];
-  return value === null || value === undefined ? null : String(value);
+  if (value === null || value === undefined) return null;
+  // Nombres del diccionario: VARCHAR2 (o NUMBER si alguien coló un id).
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : null;
 }
 
 /** Cadena vacía o solo espacios = ausente (paridad con `blankToNull` del Java). */
@@ -58,8 +60,14 @@ export async function fkGraph(
   table: string | undefined,
 ): Promise<SchemaGraph> {
   const owner = assertIdentifier(schema, 'schema');
-  const tableFilter = table?.trim() ? ' AND (c.table_name = :table OR p.table_name = :table)' : '';
-  const binds = table?.trim() ? [owner, assertIdentifier(table, 'table')] : [owner];
+  const scoped = Boolean(table?.trim());
+  // `:table` no vale: TABLE es palabra reservada y Oracle devuelve ORA-01745.
+  const tableFilter = scoped
+    ? ' AND (c.table_name = :table_name OR p.table_name = :table_name)'
+    : '';
+  // Solo los binds que el SQL usa: node-oracledb rechaza los sobrantes (NJS-098)
+  // y `:table_name` aparece dos veces (hija o padre), así que va dos veces.
+  const binds: OracleBind[] = scoped ? [owner, assertIdentifier(table!, 'table'), table!] : [owner];
 
   const rows = await dataAccess.queryForList(
     `SELECT c.table_name AS child_table,
@@ -229,12 +237,13 @@ export function registerGraph(ctx: ServerContext): void {
 UNION SELECT "${column}" FROM ${qualifiedName(owner, exclude)}`
             : `SELECT "${column}" FROM ${qualifiedName(owner, table)}`;
           const row = await ctx.dataAccess.queryForObject(
-            `WITH candidate AS (SELECT i FROM dual CONNECT BY LEVEL <= :max_range),
+            // `SELECT i FROM dual` no lee la pseudocolumna: hay que nombrar LEVEL.
+            `WITH candidate AS (SELECT LEVEL AS i FROM dual CONNECT BY LEVEL <= :max_range),
 used AS (${used})
 SELECT MIN(c.i) AS candidate_id
 FROM candidate c
 WHERE NOT EXISTS (SELECT 1 FROM used u WHERE u."${column}" = c.i)`,
-            [owner, table, column, maxRange],
+            [maxRange],
           );
           const result = {
             schema: owner,
@@ -291,7 +300,7 @@ WHERE ${notNull}
 GROUP BY ${cols.join(', ')}
 HAVING COUNT(*) >= :minCount
 ORDER BY COUNT(*) DESC`,
-            [owner, table, minCount],
+            [minCount],
           );
           const result = { schema: owner, table, columns: args.columns, minCount, groups: rows };
           return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
@@ -321,7 +330,6 @@ ORDER BY COUNT(*) DESC`,
           const table = assertIdentifier(args.table, 'table');
           const row = await ctx.dataAccess.queryForObject(
             `SELECT COUNT(*) AS cnt FROM ${qualifiedName(owner, table)}`,
-            [owner, table],
           );
           const result = {
             schema: owner,

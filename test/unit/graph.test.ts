@@ -45,8 +45,12 @@ async function graphHarness(dataAccess = new FakeDataAccess()): Promise<Harness>
 const call = async (h: Harness, name: string, args: Record<string, unknown>): Promise<ToolResult> =>
   (await h.client.callTool({ name, arguments: args })) as ToolResult;
 
-const json = async (h: Harness, name: string, args: Record<string, unknown>) =>
-  JSON.parse((await call(h, name, args)).content[0]?.text ?? '');
+const json = async (
+  h: Harness,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<Record<string, unknown>> =>
+  JSON.parse((await call(h, name, args)).content[0]?.text ?? '') as Record<string, unknown>;
 
 describe('get_fk_graph', () => {
   it('devuelve aristas child→parent y el diagrama Mermaid del esquema', async () => {
@@ -95,16 +99,20 @@ describe('get_fk_graph', () => {
   });
 
   it('acota el grafo a la tabla indicada como hija o como padre', async () => {
-    const dataAccess = new FakeDataAccess().always(() => ({ rows: [FK_ROWS[0]] }));
+    const dataAccess = new FakeDataAccess().always(() => ({ rows: [FK_ROWS[0]!] }));
     const h = await graphHarness(dataAccess);
 
     const graph = await json(h, 'get_fk_graph', { table: 'EMPLOYEE_PROJECTS' });
 
     expect(graph.focus).toBe('EMPLOYEE_PROJECTS');
     expect(dataAccess.calls[0]?.sql).toContain(
-      'AND (c.table_name = :table OR p.table_name = :table)',
+      'AND (c.table_name = :table_name OR p.table_name = :table_name)',
     );
-    expect(dataAccess.calls[0]?.binds).toEqual(['DEVUSER', 'EMPLOYEE_PROJECTS']);
+    expect(dataAccess.calls[0]?.binds).toEqual([
+      'DEVUSER',
+      'EMPLOYEE_PROJECTS',
+      'EMPLOYEE_PROJECTS',
+    ]);
   });
 });
 
@@ -121,8 +129,8 @@ describe('count_rows', () => {
       table: 'EMPLOYEES',
       rowCount: 42,
     });
-    // El SQL lleva el nombre cualificado; los binds van por posición.
-    expect(dataAccess.calls[0]?.binds).toEqual(['DEVUSER', 'EMPLOYEES']);
+    // El SQL lleva el nombre cualificado, así que la tabla no necesita bind.
+    expect(dataAccess.calls[0]?.binds).toBeUndefined();
   });
 });
 
@@ -146,7 +154,7 @@ describe('find_duplicates', () => {
     const sql = dataAccess.calls[0]?.sql ?? '';
     expect(sql).toContain('"EMAIL" IS NOT NULL');
     expect(sql).toContain('HAVING COUNT(*) >= :minCount');
-    expect(dataAccess.calls[0]?.binds).toEqual(['DEVUSER', 'EMPLOYEES', 2]);
+    expect(dataAccess.calls[0]?.binds).toEqual([2]);
   });
 
   it('rechaza una columna que no es un identificador válido', async () => {
@@ -181,7 +189,7 @@ describe('find_free_id', () => {
     });
     expect(dataAccess.calls[0]?.sql).toContain('WITH candidate AS (');
     expect(dataAccess.calls[0]?.sql).not.toContain('UNION');
-    expect(dataAccess.calls[0]?.binds).toEqual(['DEVUSER', 'EMPLOYEES', 'EMP_ID', 1000]);
+    expect(dataAccess.calls[0]?.binds).toEqual([1000]);
   });
 
   it('tope la ventana a 10000 aunque pidan más', async () => {
@@ -202,7 +210,7 @@ describe('find_free_id', () => {
     expect(dataAccess.calls[0]?.sql).toContain(
       'UNION SELECT "EMP_ID" FROM "DEVUSER"."EMPLOYEE_PROJECTS"',
     );
-    expect(dataAccess.calls[0]?.binds).toEqual(['DEVUSER', 'EMPLOYEES', 'EMP_ID', 10000]);
+    expect(dataAccess.calls[0]?.binds).toEqual([10000]);
   });
 
   it('avisa cuando no queda ningún id libre en la ventana', async () => {
@@ -291,7 +299,7 @@ describe('get_dependency_graph', () => {
 
   it('filtra por name y por type, y deduplica aristas repetidas en el Mermaid', async () => {
     const dataAccess = new FakeDataAccess().always(() => ({
-      rows: [DEP_ROWS[0], DEP_ROWS[0], DEP_ROWS[1]],
+      rows: [DEP_ROWS[0]!, DEP_ROWS[0]!, DEP_ROWS[1]!],
     }));
     const h = await graphHarness(dataAccess);
 
