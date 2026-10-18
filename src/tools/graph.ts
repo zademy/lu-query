@@ -4,7 +4,7 @@ import type { DataAccess } from '../db/data-access.js';
 import type { OracleBind, OracleRow } from '../db/oracle-types.js';
 import { assertIdentifier, qualifiedName, quoteIdentifier } from '../security/identifiers.js';
 import type { ServerContext } from '../server.js';
-import { vTool } from './mcp.js';
+import { jsonResult, vTool } from './mcp.js';
 
 /** Una relación dirigida del grafo (`GraphEdge` del Java). */
 export interface GraphEdge {
@@ -319,7 +319,7 @@ WHERE NOT EXISTS (SELECT 1 FROM used u WHERE u."${column}" = c.i)`,
             ? null
             : Number(row.CANDIDATE_ID),
       };
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+      return jsonResult(result);
     },
   );
 
@@ -361,7 +361,7 @@ ORDER BY COUNT(*) DESC`,
         [minCount],
       );
       const result = { schema: owner, table, columns: args.columns, minCount, groups: rows };
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+      return jsonResult(result);
     },
   );
 
@@ -389,7 +389,7 @@ ORDER BY COUNT(*) DESC`,
         table,
         rowCount: row?.CNT === null || row?.CNT === undefined ? 0 : Number(row.CNT),
       };
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+      return jsonResult(result);
     },
   );
 
@@ -413,7 +413,7 @@ ORDER BY COUNT(*) DESC`,
         `SELECT ${qualifiedName(owner, sequence)}.NEXTVAL AS nextval FROM dual`,
       );
       const result = { schema: owner, sequence, nextValue: Number(row?.NEXTVAL ?? 0) };
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+      return jsonResult(result);
     },
   );
 
@@ -443,7 +443,7 @@ ORDER BY COUNT(*) DESC`,
         table,
         blankToNull(args.constraint),
       );
-      return { content: [{ type: 'text' as const, text: JSON.stringify(fks) }] };
+      return jsonResult(fks);
     },
   );
 
@@ -471,7 +471,7 @@ ORDER BY COUNT(*) DESC`,
         args.name,
         args.type,
       );
-      return { content: [{ type: 'text' as const, text: JSON.stringify(graph) }] };
+      return jsonResult(graph);
     },
   );
 
@@ -497,7 +497,7 @@ ORDER BY COUNT(*) DESC`,
         await resolveSchemaFor(ctx, args.schema, 'get_fk_graph'),
         args.table,
       );
-      return { content: [{ type: 'text' as const, text: JSON.stringify(graph) }] };
+      return jsonResult(graph);
     },
   );
 }

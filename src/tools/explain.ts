@@ -3,6 +3,7 @@ import { resolveSchemaFor } from '../catalog/schema.js';
 import type { DataAccess } from '../db/data-access.js';
 import type { OracleRow } from '../db/oracle-types.js';
 import { DataAccessError } from '../errors.js';
+import { quoteTrustedIdentifier } from '../security/identifiers.js';
 import type { ServerContext } from '../server.js';
 import { jsonResult, progressReporter, rawResult, vTool } from './mcp.js';
 
@@ -255,8 +256,8 @@ function buildSuggestion(candidate: OracleRow, colStats: OracleRow[]): IndexSugg
 function buildCreateIndexDdl(schema: string, table: string, columns: string[]): string {
   const name = truncateIndexName(`IX_${table}_${columns.join('_')}`);
   return (
-    `CREATE INDEX ${quoteTrusted(schema)}.${quoteTrusted(name)}` +
-    ` ON ${quoteTrusted(schema)}.${quoteTrusted(table)} (${columns.map(quoteTrusted).join(', ')})`
+    `CREATE INDEX ${quoteTrustedIdentifier(schema)}.${quoteTrustedIdentifier(name)}` +
+    ` ON ${quoteTrustedIdentifier(schema)}.${quoteTrustedIdentifier(table)} (${columns.map(quoteTrustedIdentifier).join(', ')})`
   );
 }
 
@@ -274,11 +275,6 @@ function javaHash(text: string): number {
     hash = (Math.imul(31, hash) + text.charCodeAt(i)) | 0;
   }
   return hash;
-}
-
-/** Identificador ya confiable: solo se escapan las comillas dobles. */
-function quoteTrusted(name: string): string {
-  return `"${name.replaceAll('"', '""')}"`;
 }
 
 /** Columnas de los predicados de acceso y filtro, deduplicadas sin distinguir mayúsculas. */

@@ -7,7 +7,7 @@ import type { OracleBind, OracleCallBind } from '../db/oracle-types.js';
 import { SecurityError } from '../errors.js';
 import { assertIdentifier } from '../security/identifiers.js';
 import type { ServerContext } from '../server.js';
-import { plainResource, vTool } from './mcp.js';
+import { jsonResult, plainResource, vTool } from './mcp.js';
 
 /**
  * Plsql — describe_plsql, call_procedure y el recurso plsql-source
@@ -303,7 +303,7 @@ export function registerPlsql(ctx: ServerContext): void {
     async (dataAccess, args) => {
       const schema = await resolveSchemaFor(ctx, args.schema, 'describe_plsql');
       const described = await describePlsql(dataAccess, schema, args.name, args.type);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(described) }] };
+      return jsonResult(described);
     },
   );
 
@@ -349,7 +349,7 @@ export function registerPlsql(ctx: ServerContext): void {
         args.isFunction ?? false,
         args.returnType,
       );
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+      return jsonResult(result);
     },
   );
 

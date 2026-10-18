@@ -284,7 +284,6 @@ const TABLE_PARAM = 'Table name.';
 
 /** Stats/Health — estadísticas del optimizador, sesión y health report (#10). */
 export function registerStatsHealth(ctx: ServerContext): void {
-
   vTool(
     ctx,
     'get_table_stats',
@@ -366,9 +365,7 @@ export function registerStatsHealth(ctx: ServerContext): void {
     'get_session_privs',
     'List system privileges available to the current connection: directly granted system privs plus effective privs from enabled roles (deduplicated, ordered). WHEN TO CALL: only when the user explicitly asks what privileges the connection has; do NOT call as a preamble before querying tables or objects.',
     {},
-    async (dataAccess, _args) => ({
-      content: [{ type: 'text' as const, text: JSON.stringify(await getSessionPrivs(dataAccess)) }],
-    }),
+    async (dataAccess, _args) => jsonResult(await getSessionPrivs(dataAccess)),
   );
 
   vTool(
@@ -376,9 +373,7 @@ export function registerStatsHealth(ctx: ServerContext): void {
     'get_session_roles',
     'List roles enabled for the current connection, with admin option and default-role flag. WHEN TO CALL: only when the user explicitly asks which roles the connection has; do NOT call as a preamble before querying tables or objects.',
     {},
-    async (dataAccess, _args) => ({
-      content: [{ type: 'text' as const, text: JSON.stringify(await getSessionRoles(dataAccess)) }],
-    }),
+    async (dataAccess, _args) => jsonResult(await getSessionRoles(dataAccess)),
   );
 
   vTool(
