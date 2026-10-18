@@ -67,4 +67,3 @@ _Avoid_: iteracion, pasada, muestra
 **Envolvente de tope**:
 El SELECT que el server envuelve alrededor de toda lectura para limitarla a 1000 filas. No es parte de la sentencia del usuario pero aparece en su plan medido, asi que hay que filtrarla antes de analizarlo.
 _Avoid_: cap, limitador, paginacion
-

@@ -12,6 +12,12 @@ The five canonical triage roles use their default label strings (needs-triage, n
 
 Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+### Git flow
+
+`master` advances only through PRs from `develop` (#53-#56). Never merge `develop` into `master` locally and never push `master` directly: the PR merges are the commits that make the two branches diverge, so a local merge duplicates that work and puts them out of step. A release is: push `develop`, open the PR, let GitHub merge it.
+
+Before every commit, run the whole local gate, not just the files you touched: `npm run format:check` (prettier checks the entire repo and CI will too), `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`. A green check on a subset of files is not a green gate.
+
 <!-- antislop:start -->
 ## antislop
 For UI, copy, people, mobile layout, or code comments work, read these installed skill files directly (use these paths even if a same-named global skill exists):
