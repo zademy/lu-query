@@ -25,7 +25,8 @@ Returns:
 }
 ```
 
-- `truncated: true` means the row cap or your `limit` cut the result short.
+- `truncated: true` means the row cap or your `limit` cut the result short. When `rowCount == rowLimit` it is ambiguous: the result may be exactly at the cap.
+- The 1000-row cap applies to every read tool, not only `run_query`. Array-returning catalog tools (`list_indexes`, `list_constraints`, ...) carry no `truncated` flag, so a result cut at 1000 rows looks complete.
 - `rowLimit` is the cap in force for the call.
 
 ## get_sample_data
@@ -36,7 +37,7 @@ get_sample_data(table: string, rows?: number, schema?: string)
 
 - `rows`: default 10, capped at 1000.
 - Emits MCP progress notifications (10 → 90) when the client supports progress tokens.
-- Needs a schema resolution: pass `schema` or set `ORACLE_DB_SCHEMA`.
+- Resolves the owner itself: the `schema` argument, then `ORACLE_DB_SCHEMA`, then the session's `CURRENT_SCHEMA`.
 
 Returns the same envelope as `run_query`.
 

@@ -1,7 +1,7 @@
 ---
 name: lu-query-explore-schema
 description: Use lu-query to explore an unknown Oracle database - discover schemas, tables, views, indexes, constraints, triggers, procedures, sequences and partitions, read an object's DDL, and map dependencies with Mermaid graphs. Start here before writing any SQL against an unfamiliar schema. Covers 31 metadata and graph tools.
-compatibility: Requires the lu-query MCP server connected over stdio. Some tools need ORACLE_DB_SCHEMA set or an explicit schema argument.
+compatibility: Requires the lu-query MCP server connected over stdio. Object-scoped tools resolve the owner themselves: the schema argument, then ORACLE_DB_SCHEMA, then the session's CURRENT_SCHEMA.
 ---
 
 # Explore an Oracle schema with lu-query
@@ -21,7 +21,7 @@ compatibility: Requires the lu-query MCP server connected over stdio. Some tools
 ## Workflow
 
 1. **Ground yourself.** `test_connection` → confirm database name, current user and current schema. Everything else is relative to that.
-2. **Find objects by name pattern.** `search_objects` (any type) or `list_tables` / `list_views` (with `namePattern`, e.g. `SKL%`). These resolve the session schema on their own.
+2. **Find objects by name pattern.** `search_objects` (any type) or `list_tables` / `list_views` (with `namePattern`, e.g. `SKL%`). They resolve the session schema on their own; pass `schema` only to target another owner.
 3. **Describe the object.** `describe_table` for columns/nullability/defaults/comments, `get_ddl` for the full source, or read the resource `oracle://schema/{schema}/table/{table}` for a formatted column report and `oracle://schema/{schema}/object/{object}/ddl` for DDL.
 4. **Inspect structure.** `list_indexes`, `list_constraints`, `list_partitions`, `list_triggers`, `list_sequences` / `get_sequence_info`, `list_types`.
 5. **Check for damage.** `list_invalid_objects` (status `INVALID` = broken code) and `get_plsql_errors` for the compilation message.
@@ -30,12 +30,17 @@ compatibility: Requires the lu-query MCP server connected over stdio. Some tools
 
 ## Schema resolution (verified)
 
-| Tools                                                                                                         | Behaviour without `ORACLE_DB_SCHEMA`                                              |
-| ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `list_schemas`, `list_tables`, `list_views`, `search_objects`, `list_objects`, `run_query`, `explain_plan`    | Resolve the session schema themselves (`SYS_CONTEXT('USERENV','CURRENT_SCHEMA')`) |
-| `describe_table`, `table_exists`, `get_ddl`, every catalog tool with `table`, every stats tool, all DDL tools | Fail fast: "needs a schema: pass the schema argument or define ORACLE_DB_SCHEMA"  |
+Every object-scoped tool resolves the owner in this order, and stops at the first hit:
 
-If you cannot set server env, pass `schema` explicitly on every call.
+1. the `schema` argument of the call;
+2. `ORACLE_DB_SCHEMA` on the server;
+3. the session's own `CURRENT_SCHEMA` (`SYS_CONTEXT('USERENV','CURRENT_SCHEMA')`) - the owner you are connected as.
+
+So with neither `ORACLE_DB_SCHEMA` nor a `schema` argument, `describe_table`, `count_rows`, `get_table_stats`, every catalog tool with `table` and every DDL tool still work: they read the session schema. (Verified 2026-10-18 on 2.16.2. Before that the session fallback was broken and they failed with "needs a schema".)
+
+Pass `schema` only to target an owner other than the one you are connected as.
+
+A blank `schema` (`"   "`) is not an owner: it falls through to the next step of the order above. To know the owner you are connected as, read `currentSchema` from `test_connection`.
 
 ## Tool reference
 

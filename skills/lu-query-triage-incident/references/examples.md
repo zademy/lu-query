@@ -1,6 +1,6 @@
 # Verified examples - incident triage
 
-Oracle 26ai Free, lu-query 2.13.0, 2026-10-17, user `DEVUSER` with `SELECT ANY DICTIONARY` granted (via `scripts/test-grants-performance.sql`) but **without** `SELECT_CATALOG_ROLE`.
+Oracle 26ai Free, lu-query 2.16.2, 2026-10-18, user `DEVUSER` with `SELECT ANY DICTIONARY` granted (via `scripts/test-grants-performance.sql`) but **without** `SELECT_CATALOG_ROLE`.
 
 ## Health first - and what DEGRADED means
 

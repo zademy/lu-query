@@ -1,6 +1,6 @@
 # Verified examples - data changes
 
-Oracle 26ai Free, lu-query 2.13.0, 2026-10-17. `SKL_EMP` started this sequence with **6 rows**.
+Oracle 26ai Free, lu-query 2.16.2, 2026-10-18. `SKL_EMP` started this sequence with **6 rows**.
 
 ## 1. Preview (nothing executed)
 

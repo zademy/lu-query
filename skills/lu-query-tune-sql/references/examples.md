@@ -1,6 +1,6 @@
 # Verified examples - tuning
 
-Oracle 26ai Free, lu-query 2.13.0, 2026-10-17, `SKL_EMP` freshly created (no statistics gathered).
+Oracle 26ai Free, lu-query 2.16.2, 2026-10-18, `SKL_EMP` freshly created (no statistics gathered).
 
 Statement used: `SELECT EMP_ID, EMAIL FROM SKL_EMP WHERE DEPT_ID = 10 AND SALARY > 50000`
 

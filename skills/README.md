@@ -45,18 +45,43 @@ Nothing else is required: the skills reference the MCP server by tool name, so t
 | [lu-query-triage-incident](lu-query-triage-incident/SKILL.md)       | "Is the DB healthy? Who blocks whom?"                       | 13 performance + health + session                        |
 | [lu-query-audit-report](lu-query-audit-report/SKILL.md)             | "What was executed over a period?" interactive HTML report  | reads the audit Markdown, no MCP tool                    |
 
+## Built-in prompts
+
+The server also publishes nine MCP prompts: a prepared brief an agent can fetch instead of writing the request itself. `prompts/list` returns them with their arguments, `prompts/get` renders one.
+
+| Prompt                     | Use it for                                                    | Related skill                 |
+| -------------------------- | ------------------------------------------------------------- | ----------------------------- |
+| `review-sql-performance`   | review a slow statement before changing it                    | `lu-query-tune-sql`           |
+| `explain-schema`           | understand an unfamiliar schema                               | `lu-query-explore-schema`     |
+| `debug-invalid-plsql`      | compile errors of a procedure or package                      | `lu-query-use-plsql`          |
+| `safe-dml-plan`            | a write plan that never executes the DML                      | `lu-query-plan-data-changes`  |
+| `data-quality-audit`       | duplicates, orphans and exact counts                          | `lu-query-audit-data-quality` |
+| `triage-database-incident` | "is the database healthy, who blocks whom"                    | `lu-query-triage-incident`    |
+| `prepare-plsql-call`       | a non-executing PL/SQL call plan                              | `lu-query-use-plsql`          |
+| `operating-rules`          | the server's own calling discipline and safety limits         | every skill                   |
+| `oracle-sql-style`         | canonical Oracle SQL style: identifiers, literals, pagination | every skill                   |
+
+`operating-rules` and `oracle-sql-style` have no skill of their own on purpose: fetch them before writing SQL by hand.
+
 ## Rules that apply to every skill
 
 1. **Least privilege is the real barrier.** `lu-query` validates identifier shape, escapes literals and caps rows; it does **not** authorize. Oracle grants decide. Never treat a skill step as a security control.
 2. **Confirm before mutating.** `execute_dml` and `call_procedure` commit. `execute_dml_rollback_first` _executes_ and then rolls back. `get_next_sequence_value` advances the sequence. `EXPLAIN PLAN` writes to `PLAN_TABLE`.
 3. **Errors are values, not exceptions.** A failing call returns `isError` text with an ORA hint. Read the hint before retrying; blind retries re-run the statement.
-4. **Object-scoped tools need a schema.** Verified on 2026-10-17: `describe_table`, `count_rows`, `find_duplicates`, `get_table_stats`, `get_histogram` and every DDL tool fail fast with "needs a schema" unless you pass `schema` or the server has `ORACLE_DB_SCHEMA` set. Browsing tools (`list_tables`, `search_objects`, `run_query`, `explain_plan`) resolve the session schema on their own.
+4. **Schema resolution is automatic.** Every object-scoped tool resolves the owner in this order: the `schema` argument of the call, then `ORACLE_DB_SCHEMA`, then the session's own `CURRENT_SCHEMA` (`SYS_CONTEXT('USERENV','CURRENT_SCHEMA')`). Pass `schema` only to target an owner other than the one you are connected as. (Re-verified 2026-10-18 on 2.16.2: before that the session fallback was broken and these tools failed with "needs a schema".)
 5. **Read the live contract.** Call `tools/list` for current schemas; these files document intent, precedence and verified behaviour.
-6. **Evidence.** Every tool call is written to the session audit Markdown (on by default). Read it back with `oracle://audit/session/current` and quote the entry you relied on.
+6. **Evidence.** Every tool call is written to the session audit Markdown (on by default). Read it back with `oracle://audit/session/current` and quote the entry you relied on. The audit resource is a _template_: `resources/list` does not list it, only `resources/templates/list` does. Its `{id}` is the session timestamp and `current` is the live session; `test_connection` reports the session schema cheaply.
 
 ## Provenance
 
-Every example in `references/examples.md` was executed against the fixtures below on **Oracle Database 26ai Free (23.26.0.0.0)**, lu-query **2.13.0**, MCP over stdio, 2026-10-17. Outputs are quoted verbatim and trimmed. Calls that were _not_ executed are marked `not executed`.
+Every example in `references/examples.md` was executed against the fixtures below on **Oracle Database 26ai Free (23.26.3.0.0)**, MCP over stdio, lu-query **2.16.2**, 2026-10-18. The first full transcript run was on 2.13.0 (2026-10-17); since then every tool these examples use has been re-executed against 2.16.2, and the published tool schemas are byte-identical between both versions, so the transcripts below are current. Outputs are quoted verbatim and trimmed. Calls that were _not_ executed are marked `not executed`.
+
+What changed in 2.16.x, and was re-checked on 2026-10-18:
+
+- object-scoped tools now resolve the session schema when there is no `schema` argument and no `ORACLE_DB_SCHEMA` (before: they failed with "needs a schema");
+- every read tool is capped at 1000 rows (before, some silently stopped at the driver's 100);
+- `CLOB`/`NCLOB` columns come back as the full text, `BLOB` as a JSON buffer, `JSON` columns as the parsed object and `XMLTYPE` as XML text (before: those calls failed);
+- `execute_dml_preview` counts rows with a mirror SELECT built from your own SQL, so an alias or a subquery in the predicate works (before: Oracle rejected the mirror).
 
 Fixture (created by the maintainer, safe to recreate):
 

@@ -1,7 +1,7 @@
 ---
 name: lu-query-audit-data-quality
 description: Use lu-query to check Oracle data quality - find duplicate key candidates with find_duplicates, count orphan rows of a foreign key with validate_fk_integrity, and get exact table counts with count_rows. Use when auditing a table before migrating, deduplicating, or validating a legacy FK.
-compatibility: Requires the lu-query MCP server connected over stdio; these tools need a schema (ORACLE_DB_SCHEMA or the schema argument).
+compatibility: Requires the lu-query MCP server connected over stdio; these tools resolve the owner themselves (schema argument, then ORACLE_DB_SCHEMA, then the session's CURRENT_SCHEMA).
 ---
 
 # Audit data quality with lu-query
