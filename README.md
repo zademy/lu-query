@@ -202,6 +202,8 @@ SELECT * FROM V$VERSION
 ```
 ````
 
+The table labels are Spanish because that is the literal output of the audit writer; the field names are part of the format the `lu-query-audit-report` skill parses.
+
 Read a session back with the resource `oracle://audit/session/{id}` (autocomplete offers `current` and recent ids). Audit disables itself on I/O errors and says so on stderr. Set `MCP_AUDIT_ENABLED=false` to turn it off. Audit files contain every statement executed — protect the directory (see [SECURITY.md](https://github.com/zademy/lu-query/blob/master/SECURITY.md)).
 
 ## Tools (75)
@@ -353,10 +355,10 @@ Requires `SELECT ANY DICTIONARY` (or equivalent) on the database user; tools ret
 
 ## Agent skills (optional)
 
-Nine task-based skills. Eight teach an agent how to use these 75 tools well - which tool for which job, in what order, what mutates, how failures look, how to read results. The ninth turns the audit trail into an interactive HTML report. Install them with the [`skills`](https://www.npmjs.com/package/skills) CLI, which puts each skill where your agent looks for them:
+Ten skills. Eight teach an agent how to use these 75 tools well - which tool for which job, in what order, what mutates, how failures look, how to read results. One turns the audit trail into an interactive HTML report. The last one, [below](#sql-benchmark-and-index-recommendations), benchmarks a .sql file and proposes index changes. Install them with the [`skills`](https://www.npmjs.com/package/skills) CLI, which puts each skill where your agent looks for them:
 
 ```bash
-npx skills@latest add zademy/lu-query           # install the nine skills
+npx skills@latest add zademy/lu-query           # install the ten skills
 npx skills@latest add zademy/lu-query --list    # just show them
 ```
 
@@ -368,8 +370,13 @@ No CLI? Copy them by hand - each folder is self-contained (`SKILL.md` + `referen
 cp -r node_modules/lu-query/skills/lu-query-* ~/.claude/skills/   # Claude Code and OpenCode
 ```
 
-Skills: `lu-query-explore-schema`, `lu-query-query-data`, `lu-query-audit-data-quality`, `lu-query-plan-data-changes`, `lu-query-manage-schema`, `lu-query-use-plsql`, `lu-query-tune-sql`, `lu-query-triage-incident`, `lu-query-audit-report`. Catalog and examples provenance: [`skills/README.md`](https://github.com/zademy/lu-query/blob/master/skills/README.md). Installing the server never installs skills on its own.
-Skills: `lu-query-explore-schema`, `lu-query-query-data`, `lu-query-audit-data-quality`, `lu-query-plan-data-changes`, `lu-query-manage-schema`, `lu-query-use-plsql`, `lu-query-tune-sql`, `lu-query-triage-incident`. Catalog and examples provenance: [`skills/README.md`](https://github.com/zademy/lu-query/blob/master/skills/README.md). Installing the server never installs skills on its own.
+Skills: `lu-query-explore-schema`, `lu-query-query-data`, `lu-query-audit-data-quality`, `lu-query-plan-data-changes`, `lu-query-manage-schema`, `lu-query-use-plsql`, `lu-query-tune-sql`, `lu-query-triage-incident`, `lu-query-audit-report`, `lu-query-benchmark-sql`. Catalog and examples provenance: [`skills/README.md`](https://github.com/zademy/lu-query/blob/master/skills/README.md). Installing the server never installs skills on its own.
+
+### SQL benchmark and index recommendations
+
+[lu-query-benchmark-sql](skills/lu-query-benchmark-sql/SKILL.md) asks for your .sql file and compares the original and rewritten queries. Its HTML report includes a smooth replay of recorded runs, interactive table-access metrics, and plain-language index advice: candidates to test, existing indexes to review, and predicates that can prevent an index lookup. Each recommendation includes evidence, trade-offs and a validation step. An unused index in one plan is not automatically a bad index. Proposed SQL is displayed, not executed.
+
+The report uses the existing MCP tools. Table timings are inclusive plan statistics, not live intra-query telemetry. Result fingerprints are a consistency check, not proof of equivalence. See the [skill catalog](skills/README.md) for installation.
 
 ## Security
 
@@ -382,9 +389,3 @@ See [CONTRIBUTING.md](https://github.com/zademy/lu-query/blob/master/CONTRIBUTIN
 ## License
 
 MIT (c) 2026 Sadot Hernández Moreno
-
-### SQL benchmark and index recommendations
-
-[lu-query-benchmark-sql](skills/lu-query-benchmark-sql/SKILL.md) asks for your .sql file and compares the original and rewritten queries. Its HTML report includes a smooth replay of recorded runs, interactive table-access metrics, and plain-language index advice: candidates to test, existing indexes to review, and predicates that can prevent an index lookup. Each recommendation includes evidence, trade-offs and a validation step. An unused index in one plan is not automatically a bad index. Proposed SQL is displayed, not executed.
-
-The report uses the existing MCP tools. Table timings are inclusive plan statistics, not live intra-query telemetry. Result fingerprints are a consistency check, not proof of equivalence. See the [skill catalog](skills/README.md) for installation.

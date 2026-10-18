@@ -353,10 +353,10 @@ Requiere `SELECT ANY DICTIONARY` (o equivalente) en el usuario de base de datos;
 
 ## Skills para agentes (opcional)
 
-Ocho skills por tarea que enseñan a un agente cómo usar bien estas 75 tools: qué tool para cada trabajo, en qué orden, qué modifica datos, cómo se ven los fallos y cómo leer los resultados. Instálalas con el CLI [`skills`](https://www.npmjs.com/package/skills), que coloca cada skill donde tu agente la busca:
+Diez skills. Ocho enseñan a un agente cómo usar bien estas 75 tools: qué tool para cada trabajo, en qué orden, qué modifica datos, cómo se ven los fallos y cómo leer los resultados. Una convierte la auditoría en un reporte HTML interactivo. La última, [más abajo](#benchmark-sql-y-recomendaciones-de-índices), compara un archivo .sql y propone cambios de índices. Instálalas con el CLI [`skills`](https://www.npmjs.com/package/skills), que coloca cada skill donde tu agente la busca:
 
 ```bash
-npx skills@latest add zademy/lu-query           # instala las ocho skills
+npx skills@latest add zademy/lu-query           # instala las diez skills
 npx skills@latest add zademy/lu-query --list    # solo listarlas
 ```
 
@@ -368,7 +368,15 @@ Flags útiles: `-g` instala global en vez de por proyecto, `-a <agent>` elige el
 cp -r node_modules/lu-query/skills/lu-query-* ~/.claude/skills/   # Claude Code y OpenCode
 ```
 
-Skills: `lu-query-explore-schema`, `lu-query-query-data`, `lu-query-audit-data-quality`, `lu-query-plan-data-changes`, `lu-query-manage-schema`, `lu-query-use-plsql`, `lu-query-tune-sql`, `lu-query-triage-incident`. Catálogo y procedencia de los ejemplos: [`skills/README.md`](https://github.com/zademy/lu-query/blob/master/skills/README.md). Instalar el server nunca instala skills por su cuenta.
+Skills: `lu-query-explore-schema`, `lu-query-query-data`, `lu-query-audit-data-quality`, `lu-query-plan-data-changes`, `lu-query-manage-schema`, `lu-query-use-plsql`, `lu-query-tune-sql`, `lu-query-triage-incident`, `lu-query-audit-report`, `lu-query-benchmark-sql`. Catálogo y procedencia de los ejemplos: [`skills/README.md`](https://github.com/zademy/lu-query/blob/master/skills/README.md). Instalar el server nunca instala skills por su cuenta.
+
+### Benchmark SQL y recomendaciones de índices
+
+[lu-query-benchmark-sql](skills/lu-query-benchmark-sql/SKILL.md) pregunta dónde está tu archivo .sql y compara la consulta original con una versión mejorada. El HTML incluye una reproducción fluida de las mediciones, tablas que puedes seleccionar para ver su carga y recomendaciones de índices en palabras sencillas. Explica qué pasa, qué probar, qué cuesta y cómo comprobar si ayudó. La evidencia y el SQL propuesto se muestran, no se ejecutan.
+
+Un índice es como la lista de páginas de un libro: puede evitar leerlo entero. Si necesitas casi todas las páginas, leer seguido puede ser mejor. Por eso, un índice que no aparece en un plan no se marca automáticamente como malo. El reporte distingue ideas por probar, cambios de consulta, índices por revisar y cambios ya medidos; no crea ni borra índices.
+
+Usa las tools MCP existentes. Los tiempos por tabla incluyen el trabajo de sus operaciones hijas; no son una grabación en vivo. Una huella coincidente no demuestra equivalencia absoluta. Instalación en el [catálogo de skills](skills/README.md).
 
 ## Seguridad
 
@@ -381,11 +389,3 @@ Ver [CONTRIBUTING.md](https://github.com/zademy/lu-query/blob/master/CONTRIBUTIN
 ## Licencia
 
 MIT (c) 2026 Sadot Hernández Moreno
-
-### Benchmark SQL y recomendaciones de índices
-
-[lu-query-benchmark-sql](skills/lu-query-benchmark-sql/SKILL.md) pregunta dónde está tu archivo .sql y compara la consulta original con una versión mejorada. El HTML incluye una reproducción fluida de las mediciones, tablas que puedes seleccionar para ver su carga y recomendaciones de índices en palabras sencillas. Explica qué pasa, qué probar, qué cuesta y cómo comprobar si ayudó. La evidencia y el SQL propuesto se pueden desplegar.
-
-Un índice es como la lista de páginas de un libro: puede evitar leerlo entero. Si necesitas casi todas las páginas, leer seguido puede ser mejor. Por eso, un índice que no aparece en un plan no se marca automáticamente como malo. El reporte distingue ideas por probar, cambios de consulta, índices por revisar y cambios ya medidos; no crea ni borra índices.
-
-Usa las tools MCP existentes. Los tiempos por tabla incluyen el trabajo de sus operaciones hijas; no son una grabación en vivo. Una huella coincidente no demuestra equivalencia absoluta. Instalación en el [catálogo de skills](skills/README.md).
