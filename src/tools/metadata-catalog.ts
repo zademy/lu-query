@@ -242,10 +242,12 @@ ORDER BY owner, directory_name`,
     { schema: OWNER_FILTER },
     async (dataAccess, args) =>
       catalogResult(
+          // El CAST de access_parameters es necesario: sin el, oracledb devuelve un
+          // Lob que arrastra la conexion y el JSON del resultado no se puede serializar.
         await dataAccess.queryForList(
           `SELECT owner AS schema_name, table_name AS name, type_owner, type_name,
        default_directory_name AS directory, reject_limit, access_type,
-       access_parameters, property
+       CAST(access_parameters AS VARCHAR2(4000)) AS access_parameters, property
 FROM all_external_tables
 WHERE (:schema IS NULL OR owner = :schema)
 ORDER BY owner, table_name`,

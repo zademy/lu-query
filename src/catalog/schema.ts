@@ -23,7 +23,8 @@ export async function resolveSchemaFor(
   if (ctx.config.schema === undefined && ctx.sessionSchema === undefined) {
     try {
       const row = await ctx.dataAccess.queryForObject(SESSION_SCHEMA_SQL);
-      const session = row?.current_schema;
+      // oracledb devuelve el nombre de columna en mayúsculas, como system.ts:35.
+      const session = row?.CURRENT_SCHEMA;
       if (typeof session === 'string' && session.length > 0) ctx.sessionSchema = session;
     } catch {
       // sin sesión no hay schema: el mensaje de la tool lo dice más abajo

@@ -30,8 +30,8 @@ async function callTool(
 function withSessionSchema(data: FakeDataAccess, schema = 'DEVUSER'): FakeDataAccess {
   return data.on(
     ({ sql }) => sql.includes('CURRENT_SCHEMA'),
-    // El alias del SQL va en minúsculas y node-oracledb lo conserva así.
-    () => ({ rows: [{ current_schema: schema }] }),
+    // node-oracledb devuelve el nombre de columna en MAYÚSCULAS, no el alias.
+    () => ({ rows: [{ CURRENT_SCHEMA: schema }] }),
   );
 }
 
