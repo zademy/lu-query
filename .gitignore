@@ -8,3 +8,5 @@ coverage/
 .codegraph/
 mcp-audit-logs/
 video/out/
+/.playwright-mcp
+perf-*/

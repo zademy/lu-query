@@ -381,3 +381,11 @@ Ver [CONTRIBUTING.md](https://github.com/zademy/lu-query/blob/master/CONTRIBUTIN
 ## Licencia
 
 MIT (c) 2026 Sadot Hernández Moreno
+
+### Benchmark SQL y recomendaciones de índices
+
+[lu-query-benchmark-sql](skills/lu-query-benchmark-sql/SKILL.md) pregunta dónde está tu archivo .sql y compara la consulta original con una versión mejorada. El HTML incluye una reproducción fluida de las mediciones, tablas que puedes seleccionar para ver su carga y recomendaciones de índices en palabras sencillas. Explica qué pasa, qué probar, qué cuesta y cómo comprobar si ayudó. La evidencia y el SQL propuesto se pueden desplegar.
+
+Un índice es como la lista de páginas de un libro: puede evitar leerlo entero. Si necesitas casi todas las páginas, leer seguido puede ser mejor. Por eso, un índice que no aparece en un plan no se marca automáticamente como malo. El reporte distingue ideas por probar, cambios de consulta, índices por revisar y cambios ya medidos; no crea ni borra índices.
+
+Usa las tools MCP existentes. Los tiempos por tabla incluyen el trabajo de sus operaciones hijas; no son una grabación en vivo. Una huella coincidente no demuestra equivalencia absoluta. Instalación en el [catálogo de skills](skills/README.md).

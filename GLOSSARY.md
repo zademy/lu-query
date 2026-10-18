@@ -55,3 +55,16 @@ _Avoid_: dashboard, export de auditoría, informe de una ejecución
 **Ventana del reporte**:
 Rango de fechas en `dd/mm/aaaa`, inclusivo y de un mes como máximo, que delimita qué entradas entran al reporte de auditoría.
 _Avoid_: periodo, rango de ejecución, filtro de sesión
+
+**Huella de resultado**:
+Resumen de una sola fila (COUNT y checksum) que resume el conjunto completo que devolvio una sentencia, para poder compararlo con el de otra version cuando la tool corta la lectura a 1000 filas.
+_Avoid_: muestra, comparacion de filas
+
+**Repeticion**:
+Una ejecucion completa de la sentencia medida. Un benchmark repite la sentencia N veces y compara medianas, no medias: las primeras son calentamiento de cache y si se promedian ocultan el resultado.
+_Avoid_: iteracion, pasada, muestra
+
+**Envolvente de tope**:
+El SELECT que el server envuelve alrededor de toda lectura para limitarla a 1000 filas. No es parte de la sentencia del usuario pero aparece en su plan medido, asi que hay que filtrarla antes de analizarlo.
+_Avoid_: cap, limitador, paginacion
+
