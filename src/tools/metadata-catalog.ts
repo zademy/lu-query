@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { withToolContext } from '../audit/context.js';
-import { resolveSchema, schemaFallback } from '../catalog/schema.js';
+import { resolveSchemaFor } from '../catalog/schema.js';
 import type { OracleBind } from '../db/oracle-types.js';
 import { guardTool, type ToolTextResult } from '../errors.js';
 import { assertIdentifier } from '../security/identifiers.js';
@@ -70,8 +70,8 @@ function namePattern(what: string) {
 export function registerMetadataCatalog(ctx: ServerContext): void {
   const { dataAccess } = ctx;
   /** Owner efectivo de las tools que no pueden operar sin él. */
-  const owner = (args: { schema?: string }, tool: string): string =>
-    resolveSchema(args.schema, schemaFallback(ctx), tool);
+  const owner = (args: { schema?: string }, tool: string): Promise<string> =>
+    resolveSchemaFor(ctx, args.schema, tool);
   const table = (args: { table: string }): string => assertIdentifier(args.table, 'tabla');
   const objType = (args: { type?: string }): OracleBind =>
     args.type === undefined ? null : assertIdentifier(args.type, 'tipo');
@@ -96,7 +96,7 @@ export function registerMetadataCatalog(ctx: ServerContext): void {
 FROM all_indexes i
 WHERE i.table_owner = :schema AND i.table_name = :col_table
 ORDER BY i.index_name`,
-              [owner(args, 'list_indexes'), table(args)],
+              [await owner(args, 'list_indexes'), table(args)],
             ),
           ),
         ),
@@ -131,7 +131,7 @@ ORDER BY i.index_name`,
 FROM all_constraints c
 WHERE c.owner = :schema AND c.table_name = :col_table
 ORDER BY c.constraint_type, c.constraint_name`,
-              [owner(args, 'list_constraints'), table(args)],
+              [await owner(args, 'list_constraints'), table(args)],
             ),
           ),
         ),
@@ -178,7 +178,7 @@ ORDER BY sequence_owner, sequence_name`,
     async (args) =>
       withToolContext('get_sequence_info', args, () =>
         guardTool(async () => {
-          const sequenceOwner = owner(args, 'get_sequence_info');
+          const sequenceOwner = await owner(args, 'get_sequence_info');
           const sequence = assertIdentifier(args.sequence, 'secuencia');
           const rows = await dataAccess.queryForList(
             `SELECT sequence_owner AS schema_name,
@@ -410,7 +410,7 @@ ORDER BY log_owner, master`,
 FROM all_tab_partitions
 WHERE table_owner = :schema AND table_name = :col_table
 ORDER BY partition_position`,
-              [owner(args, 'list_partitions'), table(args)],
+              [await owner(args, 'list_partitions'), table(args)],
             ),
           ),
         ),
@@ -437,7 +437,7 @@ JOIN all_indexes i
   ON i.owner = ip.index_owner AND i.index_name = ip.index_name
 WHERE i.table_owner = :schema AND i.table_name = :col_table
 ORDER BY ip.index_name, ip.partition_position`,
-              [owner(args, 'list_ind_partitions'), table(args)],
+              [await owner(args, 'list_ind_partitions'), table(args)],
             ),
           ),
         ),
@@ -462,7 +462,7 @@ ORDER BY ip.index_name, ip.partition_position`,
 FROM all_tab_subpartitions
 WHERE table_owner = :schema AND table_name = :col_table
 ORDER BY partition_name, subpartition_position`,
-              [owner(args, 'list_subpartitions'), table(args)],
+              [await owner(args, 'list_subpartitions'), table(args)],
             ),
           ),
         ),
@@ -486,7 +486,7 @@ ORDER BY partition_name, subpartition_position`,
 FROM all_lobs
 WHERE owner = :schema AND table_name = :col_table
 ORDER BY column_name`,
-              [owner(args, 'list_lob_columns'), table(args)],
+              [await owner(args, 'list_lob_columns'), table(args)],
             ),
           ),
         ),
@@ -571,7 +571,7 @@ WHERE owner = :schema AND name = :obj_name
 AND (:obj_type IS NULL OR type = :obj_type)
 ORDER BY referenced_owner, referenced_name, referenced_type`,
               [
-                owner(args, 'list_dependencies'),
+                await owner(args, 'list_dependencies'),
                 assertIdentifier(args.name, 'nombre'),
                 objType(args),
                 objType(args),

@@ -25,21 +25,13 @@ function optionalSchema(owner: string) {
   return z.string().describe(`${owner}${SCHEMA_OPTIONAL}`).optional();
 }
 
-/** Schema efectivo: el pedido gana; si no, el configurado (o error si no hay). */
-async function owner(
-  ctx: ServerContext,
-  requested: string | undefined,
-  tool: string,
-): Promise<string> {
-  return resolveSchemaFor(ctx, requested, tool);
-}
 
 function text(value: string): { type: 'text'; text: string } {
   return { type: 'text', text: value };
 }
 
 async function commentOnTable(ctx: ServerContext, args: CommentArgs): Promise<string> {
-  const schema = await owner(ctx, args.schema, 'comment_on_table');
+  const schema = await resolveSchemaFor(ctx, args.schema, 'comment_on_table');
   await ctx.dataAccess.execute(
     `COMMENT ON TABLE ${qualifiedName(schema, args.table)} IS ${quoteLiteral(args.comment)}`,
   );
@@ -47,7 +39,7 @@ async function commentOnTable(ctx: ServerContext, args: CommentArgs): Promise<st
 }
 
 async function commentOnColumn(ctx: ServerContext, args: ColumnCommentArgs): Promise<string> {
-  const schema = await owner(ctx, args.schema, 'comment_on_column');
+  const schema = await resolveSchemaFor(ctx, args.schema, 'comment_on_column');
   await ctx.dataAccess.execute(
     `COMMENT ON COLUMN ${qualifiedName(schema, args.table)}.${quoteIdentifier(args.column, 'columna')} IS ${quoteLiteral(args.comment)}`,
   );
@@ -55,7 +47,7 @@ async function commentOnColumn(ctx: ServerContext, args: ColumnCommentArgs): Pro
 }
 
 async function createOrReplaceView(ctx: ServerContext, args: ViewArgs): Promise<string> {
-  const schema = await owner(ctx, args.schema, 'create_or_replace_view');
+  const schema = await resolveSchemaFor(ctx, args.schema, 'create_or_replace_view');
   // Oracle es quien parsea el cuerpo; solo se comprueba que sea un SELECT.
   if (!args.selectBody.trim().toUpperCase().startsWith('SELECT')) {
     throw new SecurityError('selectBody must be a SELECT statement.');
@@ -67,7 +59,7 @@ async function createOrReplaceView(ctx: ServerContext, args: ViewArgs): Promise<
 }
 
 async function createSynonym(ctx: ServerContext, args: SynonymArgs): Promise<string> {
-  const schema = await owner(ctx, args.schema, 'create_synonym');
+  const schema = await resolveSchemaFor(ctx, args.schema, 'create_synonym');
   await ctx.dataAccess.execute(
     `CREATE ${args.isPublic ? 'PUBLIC ' : ''}SYNONYM ${qualifiedName(schema, args.synonym)} FOR ${qualifiedName(args.targetSchema, args.targetName)}`,
   );
@@ -75,7 +67,7 @@ async function createSynonym(ctx: ServerContext, args: SynonymArgs): Promise<str
 }
 
 async function createSequence(ctx: ServerContext, args: SequenceArgs): Promise<string> {
-  const schema = await owner(ctx, args.schema, 'create_sequence');
+  const schema = await resolveSchemaFor(ctx, args.schema, 'create_sequence');
   if (args.incrementBy === 0) {
     throw new SecurityError('incrementBy must be non-zero (Oracle INCREMENT BY 0 is invalid).');
   }
@@ -92,7 +84,7 @@ async function createSequence(ctx: ServerContext, args: SequenceArgs): Promise<s
 }
 
 async function createIndex(ctx: ServerContext, args: IndexArgs): Promise<string> {
-  const schema = await owner(ctx, args.schema, 'create_index');
+  const schema = await resolveSchemaFor(ctx, args.schema, 'create_index');
   if (args.columns.length === 0) {
     throw new SecurityError('At least one column is required.');
   }
@@ -104,7 +96,7 @@ async function createIndex(ctx: ServerContext, args: IndexArgs): Promise<string>
 }
 
 async function createMviewLog(ctx: ServerContext, args: MviewLogArgs): Promise<string> {
-  const schema = await owner(ctx, args.schema, 'create_mview_log');
+  const schema = await resolveSchemaFor(ctx, args.schema, 'create_mview_log');
   const withRowid = args.withRowid ?? false;
   const withPrimaryKey = args.withPrimaryKey ?? false;
   if (!withRowid && !withPrimaryKey) {

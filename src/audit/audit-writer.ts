@@ -123,29 +123,13 @@ export function createFileAuditWriter(options: FileAuditWriterOptions): AuditWri
   };
 }
 
-/** Una sesión de auditoría por proceso, equivalente al bean `AuditLogWriter`. */
-let live: AuditWriter = createFileAuditWriter({ dir: './mcp-audit-logs', enabled: false });
-
-/** Configura la auditoría viva del proceso (`MCP_AUDIT_ENABLED` / `MCP_AUDIT_DIR`). */
-export function configureAudit(config: AuditConfig): void {
-  live = createFileAuditWriter({ dir: config.dir, enabled: config.enabled });
-}
-
-/** Id de la sesión viva; es lo que resuelve `oracle://audit/session/current`. */
-export function currentAuditSessionId(): string {
-  return live.sessionId();
-}
-
-/** Espera el flush de las entradas pendientes (cierre del pool/proceso). */
-export function drainAudit(): Promise<void> {
-  return live.drain();
-}
 
 /**
  * Envuelve una sentencia del chokepoint DataAccess: cronometra, ejecuta y deja
  * la entrada POST-ejecución con las filas derivadas (o `-1` si falló).
  */
 export async function auditStatement<T>(
+  audit: AuditWriter,
   sql: string,
   run: () => Promise<T>,
   rowsOf: (value: T) => number,
@@ -169,7 +153,7 @@ export async function auditStatement<T>(
     value = await run();
   } catch (error) {
     const finishedAt = new Date();
-    await live.write({
+    await audit.write({
       ...common,
       outcome: 'ERROR',
       rows: -1,
@@ -181,7 +165,7 @@ export async function auditStatement<T>(
   }
 
   const finishedAt = new Date();
-  await live.write({
+  await audit.write({
     ...common,
     outcome: 'OK',
     rows: rowsOf(value),

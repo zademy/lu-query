@@ -4,9 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { currentAuditSessionId } from '../../src/audit/audit-writer.js';
 import { loadConfig } from '../../src/config.js';
-import { withAudit } from '../../src/db/data-access.js';
 import { FakeDataAccess } from '../../src/db/fake-data-access.js';
 import { DataAccessError } from '../../src/errors.js';
 import { createServer } from '../../src/server.js';
@@ -121,7 +119,7 @@ describe('tools/list · grupo MetadataCatalog', () => {
     });
   });
 
-  it.each(OWNER_TOOLS)('%s exige schema explícito si no hay configurado', async (name) => {
+  it.each(OWNER_TOOLS)('%s consulta la sesión y falla si tampoco hay schema', async (name) => {
     const dataAccess = new FakeDataAccess().always(() => ({ rows: [] }));
     const args = name === 'list_dependencies' ? { name: TABLE } : { table: TABLE };
 
@@ -130,7 +128,9 @@ describe('tools/list · grupo MetadataCatalog', () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0]?.text).toContain(`${name} necesita un schema`);
-      expect(dataAccess.calls).toHaveLength(0);
+      // Sólo la consulta del schema de sesión: la de catálogo nunca sale.
+      expect(dataAccess.calls).toHaveLength(1);
+      expect(dataAccess.calls[0]?.sql).toContain('SYS_CONTEXT');
     });
   });
 
@@ -273,7 +273,7 @@ describe('tools/list · grupo MetadataCatalog', () => {
     const dir = await mkdtemp(join(tmpdir(), 'lu-query-catalog-audit-'));
     const handle = createServer({
       config: { ...loadConfig({}), audit: { enabled: true, dir } },
-      dataAccess: withAudit(new FakeDataAccess().always(() => ({ rows: [] }))),
+      dataAccess: new FakeDataAccess().always(() => ({ rows: [] })),
     });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'lu-query-catalog-audit-test', version: '0.0.0' });
@@ -285,7 +285,7 @@ describe('tools/list · grupo MetadataCatalog', () => {
         arguments: { schema: DEVUSER, table: TABLE },
       });
       const { contents } = await client.readResource({
-        uri: `oracle://audit/session/${currentAuditSessionId()}`,
+        uri: `oracle://audit/session/${handle.context.audit.sessionId()}`,
       });
       const markdown = String((contents[0] as { text?: string } | undefined)?.text);
 

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { withToolContext } from '../audit/context.js';
-import { resolveSchema } from '../catalog/schema.js';
+import { resolveSchemaFor } from '../catalog/schema.js';
 import type { DataAccess } from '../db/data-access.js';
 import type { OracleRow } from '../db/oracle-types.js';
 import { DataAccessError, guardTool } from '../errors.js';
@@ -539,7 +539,7 @@ export function registerExplain(ctx: ServerContext): void {
             json(
               await listUnusedIndexes(
                 ctx.dataAccess,
-                resolveSchema(args.schema, ctx.config.schema, 'list_unused_indexes'),
+                await resolveSchemaFor(ctx, args.schema, 'list_unused_indexes'),
               ),
             ),
           ],

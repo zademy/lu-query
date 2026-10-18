@@ -1,50 +1,84 @@
 import { describe, expect, it } from 'vitest';
-import { resolveSchemaFor } from '../../src/catalog/schema.js';
 import { FakeDataAccess } from '../../src/db/fake-data-access.js';
-import type { ServerContext } from '../../src/server.js';
+import { createHarness } from '../helpers/harness.js';
 
-/** Contexto mínimo: el resolver solo necesita config, sessionSchema y dataAccess. */
-function ctx(dataAccess: FakeDataAccess, schema?: string): ServerContext {
-  return {
-    server: undefined as never,
-    dataAccess,
-    config: { schema } as ServerContext['config'],
-  };
+/** La sesión responde HR cuando la tool no trae schema ni ORACLE_DB_SCHEMA. */
+function conSesionHR(): FakeDataAccess {
+  return new FakeDataAccess()
+    .on((call) => call.sql.includes('SYS_CONTEXT'), () => ({ rows: [{ current_schema: 'HR' }] }))
+    .always(() => ({ rows: [] }));
 }
 
-describe('resolveSchemaFor', () => {
-  it('gana el schema explícito sin tocar la base', async () => {
-    const dataAccess = new FakeDataAccess().alwaysFail(new Error('no debe consultar'));
+/**
+ * La resolución del schema se prueba por el mismo seam que el cliente: la tool
+ * entra por MCP y se afirma sobre el SQL que salió. Antes esto se probaba contra
+ * un contexto de mentira y el fork de list_indexes quedaba invisible.
+ */
+describe('schema de sesión', () => {
+  it('list_indexes opera contra el schema de la sesión si la tool no pide ninguno', async () => {
+    const harness = await createHarness({ dataAccess: conSesionHR() });
 
-    await expect(resolveSchemaFor(ctx(dataAccess), ' HR ', 'list_tables')).resolves.toBe('HR');
-    expect(dataAccess.calls).toHaveLength(0);
+    try {
+      const result = (await harness.client.callTool({
+        name: 'list_indexes',
+        arguments: { table: 'EMP' },
+      })) as { isError?: boolean; content: { text: string }[] };
+
+      expect(result.isError).toBeFalsy();
+      const catalogo = harness.dataAccess.calls.find((call) => call.sql.includes('all_indexes'));
+      expect(catalogo?.binds?.[0]).toBe('HR');
+    } finally {
+      await harness.close();
+    }
   });
 
-  it('usa ORACLE_DB_SCHEMA sin tocar la base', async () => {
-    const dataAccess = new FakeDataAccess().alwaysFail(new Error('no debe consultar'));
+  it('el schema explícito gana y no se consulta la sesión', async () => {
+    const harness = await createHarness({ dataAccess: conSesionHR() });
 
-    await expect(resolveSchemaFor(ctx(dataAccess, 'APP'), undefined, 'list_tables')).resolves.toBe(
-      'APP',
-    );
-    expect(dataAccess.calls).toHaveLength(0);
+    try {
+      await harness.client.callTool({
+        name: 'list_indexes',
+        arguments: { table: 'EMP', schema: 'SCOTT' },
+      });
+
+      expect(harness.dataAccess.calls.some((call) => call.sql.includes('SYS_CONTEXT'))).toBe(false);
+      const catalogo = harness.dataAccess.calls.find((call) => call.sql.includes('all_indexes'));
+      expect(catalogo?.binds?.[0]).toBe('SCOTT');
+    } finally {
+      await harness.close();
+    }
   });
 
-  it('cae al schema de la sesión y lo cachea para las siguientes tools', async () => {
-    const dataAccess = new FakeDataAccess().always(() => ({ rows: [{ current_schema: 'HR' }] }));
-    const context = ctx(dataAccess);
+  it('ORACLE_DB_SCHEMA gana a la sesión sin tocar la base', async () => {
+    const harness = await createHarness({
+      dataAccess: new FakeDataAccess().alwaysFail(new Error('no debe consultar')),
+      config: { schema: 'APP' },
+    });
 
-    await expect(resolveSchemaFor(context, undefined, 'describe_table')).resolves.toBe('HR');
-    await expect(resolveSchemaFor(context, undefined, 'list_tables')).resolves.toBe('HR');
+    try {
+      await harness.client.callTool({ name: 'list_indexes', arguments: { table: 'EMP' } });
 
-    expect(dataAccess.calls).toHaveLength(1);
-    expect(dataAccess.calls[0]?.sql).toContain('SYS_CONTEXT');
+      expect(harness.dataAccess.calls.some((call) => call.sql.includes('SYS_CONTEXT'))).toBe(false);
+    } finally {
+      await harness.close();
+    }
   });
 
-  it('propaga el mensaje de la tool si no hay schema de ninguna parte', async () => {
-    const dataAccess = new FakeDataAccess().always(() => ({ rows: [] }));
+  it('sin schema en ninguna parte, la tool lo dice en su mensaje', async () => {
+    const harness = await createHarness({
+      dataAccess: new FakeDataAccess().always(() => ({ rows: [] })),
+    });
 
-    await expect(resolveSchemaFor(ctx(dataAccess), undefined, 'list_tables')).rejects.toThrow(
-      'list_tables necesita un schema',
-    );
+    try {
+      const result = (await harness.client.callTool({
+        name: 'list_indexes',
+        arguments: { table: 'EMP' },
+      })) as { isError?: boolean; content: { text: string }[] };
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0]?.text).toContain('list_indexes necesita un schema');
+    } finally {
+      await harness.close();
+    }
   });
 });

@@ -1,7 +1,7 @@
 import { MAX_ROWS, TIMEOUTS, type ResolvedConfig } from '../config.js';
 import { DataAccessError } from '../errors.js';
 import { isValidIdentifier } from '../security/identifiers.js';
-import { withAudit, type DataAccess, type QueryOptions } from './data-access.js';
+import type { DataAccess, QueryOptions } from './data-access.js';
 import {
   loadOracle,
   type OracleBind,
@@ -215,7 +215,9 @@ export function createOracleDataAccess(provider: PoolProvider): DataAccess {
       withStatementTimeout(connection, options?.timeoutMs ?? TIMEOUTS.statementMs, () =>
         connection
           // node-oracledb rechaza `binds` undefined cuando se pasan 3 argumentos.
-          .execute(sql, binds ?? [], { outFormat, maxRows: options?.maxRows })
+          // Sin tope explícito manda MAX_ROWS: el default del driver son 100
+          // filas y el server promete 1000.
+          .execute(sql, binds ?? [], { outFormat, maxRows: options?.maxRows ?? MAX_ROWS })
           .catch((error: unknown) => {
             throw asDataAccessError(error, 'Oracle rechazó la sentencia');
           }),
@@ -235,7 +237,7 @@ export function createOracleDataAccess(provider: PoolProvider): DataAccess {
     withConnection(provider, (connection, outFormat) =>
       withStatementTimeout(connection, options?.timeoutMs ?? TIMEOUTS.statementMs, async () => {
         const result = await connection
-          .execute(sql, binds ?? [], { outFormat, maxRows: options?.maxRows })
+          .execute(sql, binds ?? [], { outFormat, maxRows: options?.maxRows ?? MAX_ROWS })
           .catch((error: unknown) => {
             throw asDataAccessError(error, 'Oracle rechazó la sentencia');
           });
@@ -245,8 +247,8 @@ export function createOracleDataAccess(provider: PoolProvider): DataAccess {
       }),
     );
 
-  // El hook de auditoría envuelve todo el chokepoint: una entrada por sentencia.
-  return withAudit({
+  // El hook de auditoría lo aplica `createServer`, que es donde vive el writer.
+  return {
     async queryForList(sql, binds, options) {
       return (await execute(sql, binds, options)).rows;
     },
@@ -281,5 +283,5 @@ export function createOracleDataAccess(provider: PoolProvider): DataAccess {
     close() {
       return provider.close();
     },
-  });
+  };
 }

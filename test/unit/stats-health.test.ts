@@ -451,12 +451,6 @@ describe('oracle_mcp_health_report', () => {
 
   describe('estado real de la auditoría', () => {
     const tempDirs: string[] = [];
-    afterAll(async () => {
-      // La auditoría del proceso queda configurada con un dir temporal: la
-      // apagamos para no contaminar otras suites del mismo proceso.
-      const { configureAudit } = await import('../../src/audit/audit-writer.js');
-      configureAudit({ enabled: false, dir: './mcp-audit-logs' });
-    });
 
     it('enabled cuando la sesión viva escribe de verdad', async () => {
       const dir = await mkdtemp(join(tmpdir(), 'lu-query-audit-'));
@@ -468,11 +462,7 @@ describe('oracle_mcp_health_report', () => {
       });
       try {
         // Una sentencia real por la API del writer: deja la sesión en disco.
-        await auditStatement(
-          'SELECT 1 FROM dual',
-          () => Promise.resolve({}),
-          () => 0,
-        );
+        await auditStatement(harness.audit, 'SELECT 1 FROM dual', () => Promise.resolve({}), () => 0);
 
         const result = (await harness.client.callTool({
           name: 'oracle_mcp_health_report',
@@ -497,11 +487,7 @@ describe('oracle_mcp_health_report', () => {
       });
       try {
         // La sentencia se apaga sola por I/O: auditStatement nunca lanza.
-        await auditStatement(
-          'SELECT 1 FROM dual',
-          () => Promise.resolve({}),
-          () => 0,
-        );
+        await auditStatement(harness.audit, 'SELECT 1 FROM dual', () => Promise.resolve({}), () => 0);
 
         const result = (await harness.client.callTool({
           name: 'oracle_mcp_health_report',

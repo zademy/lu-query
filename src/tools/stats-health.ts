@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { withToolContext } from '../audit/context.js';
 import { readAuditSession } from '../audit/audit-reader.js';
-import { currentAuditSessionId } from '../audit/audit-writer.js';
 import type { AuditConfig } from '../config.js';
 import { MAX_ROWS, TIMEOUTS } from '../config.js';
 import { resolveSchemaFor } from '../catalog/schema.js';
@@ -148,9 +147,9 @@ function rootMessage(error: unknown): string {
  * además que la sesión viva esté dejando archivo (un writer apagado por I/O
  * deja de escribir sin lanzar). Es la API de audit-writer/audit-reader.
  */
-async function auditState(audit: AuditConfig): Promise<string> {
-  if (!audit.enabled) return 'disabled';
-  const markdown = await readAuditSession(audit.dir, currentAuditSessionId());
+async function auditState(ctx: ServerContext): Promise<string> {
+  if (!ctx.config.audit.enabled) return 'disabled';
+  const markdown = await readAuditSession(ctx.config.audit.dir, ctx.audit.sessionId());
   return markdown === undefined ? 'disabled (I/O error stopped session logging)' : 'enabled';
 }
 
@@ -268,7 +267,7 @@ export async function healthReport(ctx: ServerContext): Promise<HealthReport> {
     status: 'PASS',
     detail:
       `max-rows=${MAX_ROWS}, query-timeout=${TIMEOUTS.statementMs / 1000}s` +
-      `, audit=${await auditState(config.audit)}`,
+      `, audit=${await auditState(ctx)}`,
   });
 
   const overall: HealthReport['overallStatus'] = down

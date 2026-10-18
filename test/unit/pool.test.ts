@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadConfig } from '../../src/config.js';
+import { loadConfig, MAX_ROWS } from '../../src/config.js';
 import { DataAccessError } from '../../src/errors.js';
 import {
   createOracleDataAccess,
@@ -133,6 +133,15 @@ describe('createOracleDataAccess sobre el pool', () => {
     await db.queryForList('SELECT * FROM employees', [], { maxRows: 10, timeoutMs: 5_000 });
 
     expect(executed[0]?.options).toMatchObject({ maxRows: 10 });
+  });
+
+  it('sin tope explicito manda MAX_ROWS, no el default de 100 filas del driver', async () => {
+    const { provider, executed } = fakeBackend(() => ({ rows: [] }));
+    const db = createOracleDataAccess(provider);
+
+    await db.queryForList('SELECT * FROM employees', []);
+
+    expect(executed[0]?.options).toMatchObject({ maxRows: MAX_ROWS });
   });
 
   it('executeInTransaction confirma o revierte segun el desenlace', async () => {
