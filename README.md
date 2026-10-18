@@ -105,23 +105,80 @@ The pool is lazy: the server starts and answers `initialize` without a database;
 
 ## Configuration
 
-| Variable                      | Required  | Default              | Purpose                                                                                                |
-| ----------------------------- | --------- | -------------------- | ------------------------------------------------------------------------------------------------------ |
-| `ORACLE_DB_URL`               | yes       | —                    | Connect string: JDBC (`jdbc:oracle:thin:@//host:1521/service`) or easy-connect (`host:1521/service`)   |
-| `ORACLE_DB_USERNAME`          | yes       | —                    | Database user                                                                                          |
-| `ORACLE_DB_PASSWORD`          | yes       | —                    | Database password                                                                                      |
-| `ORACLE_DB_SCHEMA`            | no        | session default      | Schema set via `ALTER SESSION SET CURRENT_SCHEMA` on each pooled session                               |
-| `ORACLE_POOL_SIZE`            | no        | `4`                  | Connection pool size                                                                                   |
-| `MCP_SERVER_VERSION`          | no        | `2.13.0`             | Version reported by the server                                                                         |
-| `MCP_AUDIT_ENABLED`           | no        | `true`               | Session audit on by default — the only contract change vs the Java server (which defaulted to `false`) |
-| `MCP_AUDIT_DIR`               | no        | `./mcp-audit-logs`   | Directory for audit Markdown files                                                                     |
-| `SENTRY_ENABLED`              | no        | `false`              | Error reporting to Sentry                                                                              |
-| `SENTRY_DSN`                  | if Sentry | —                    | Sentry DSN                                                                                             |
-| `SENTRY_ENV`                  | no        | —                    | Sentry environment                                                                                     |
-| `SENTRY_RELEASE`              | no        | `MCP_SERVER_VERSION` | Sentry release                                                                                         |
-| `SENTRY_SEND_DEFAULT_PII`     | no        | `false`              | PII in Sentry events                                                                                   |
-| `SENTRY_AUTH_TOKEN`           | no        | —                    | Accepted for config parity; unused at runtime (`@sentry/node` has no such setting)                     |
-| `LOG_LEVEL` / `APP_LOG_LEVEL` | no        | `INFO`               | Server log level                                                                                       |
+| Variable                      | Required  | Default            | Purpose                                                                                                |
+| ----------------------------- | --------- | ------------------ | ------------------------------------------------------------------------------------------------------ |
+| `ORACLE_DB_URL`               | yes       | —                  | Connect string: JDBC (`jdbc:oracle:thin:@//host:1521/service`) or easy-connect (`host:1521/service`)   |
+| `ORACLE_DB_USERNAME`          | yes       | —                  | Database user                                                                                          |
+| `ORACLE_DB_PASSWORD`          | yes       | —                  | Database password                                                                                      |
+| `ORACLE_DB_SCHEMA`            | no        | session default    | Schema set via `ALTER SESSION SET CURRENT_SCHEMA` on each pooled session                               |
+| `ORACLE_POOL_SIZE`            | no        | `4`                | Connection pool size                                                                                   |
+| `MCP_SERVER_VERSION`          | no        | package version    | Version reported by the server                                                                         |
+| `MCP_AUDIT_ENABLED`           | no        | `true`             | Session audit on by default — the only contract change vs the Java server (which defaulted to `false`) |
+| `MCP_AUDIT_DIR`               | no        | `./mcp-audit-logs` | Directory for audit Markdown files                                                                     |
+| `SENTRY_ENABLED`              | no        | `false`            | Error reporting to Sentry                                                                              |
+| `SENTRY_DSN`                  | if Sentry | —                  | Sentry DSN                                                                                             |
+| `SENTRY_ENV`                  | no        | `local`            | Sentry environment                                                                                     |
+| `SENTRY_RELEASE`              | no        | `0.0.1-SNAPSHOT`   | Sentry release                                                                                         |
+| `SENTRY_SEND_DEFAULT_PII`     | no        | `false`            | PII in Sentry events                                                                                   |
+| `SENTRY_AUTH_TOKEN`           | no        | —                  | Accepted for config parity; unused at runtime (`@sentry/node` has no such setting)                     |
+| `LOG_LEVEL` / `APP_LOG_LEVEL` | no        | `INFO`             | Server log level                                                                                       |
+
+All of them in one place, ready to paste. Only the first three are required; drop any other line and its default from the table applies. The same names go in the `environment` block of an MCP client config.
+
+```bash
+# required
+export ORACLE_DB_URL='jdbc:oracle:thin:@//db.host:1521/FREEPDB1'
+export ORACLE_DB_USERNAME='app_user'
+export ORACLE_DB_PASSWORD='change-me'
+
+# optional
+export ORACLE_DB_SCHEMA='APP'             # pin a schema instead of the connected user's
+export ORACLE_POOL_SIZE='8'                # connections kept open (default 4)
+export MCP_AUDIT_ENABLED='true'            # session audit Markdown on/off
+export MCP_AUDIT_DIR='/var/log/lu-query'  # absolute path, or it lands in the client's cwd
+export LOG_LEVEL='INFO'                    # APP_LOG_LEVEL also works
+export SENTRY_ENABLED='false'              # stays off until SENTRY_DSN is set
+
+# Sentry, only if you report errors (values from your Sentry project)
+# export SENTRY_DSN='https://key@sentry.io/1234567'
+# export SENTRY_ENV='production'
+# export SENTRY_RELEASE='2.16.2'
+# export SENTRY_SEND_DEFAULT_PII='false'
+# export SENTRY_AUTH_TOKEN=''
+
+# export MCP_SERVER_VERSION='2.16.2'       # only to pin the reported version
+```
+
+```json
+{
+  "ORACLE_DB_URL": "jdbc:oracle:thin:@//db.host:1521/FREEPDB1",
+  "ORACLE_DB_USERNAME": "app_user",
+  "ORACLE_DB_PASSWORD": "change-me",
+  "ORACLE_DB_SCHEMA": "APP",
+  "ORACLE_POOL_SIZE": "8",
+  "MCP_AUDIT_ENABLED": "true",
+  "MCP_AUDIT_DIR": "/var/log/lu-query",
+  "LOG_LEVEL": "INFO",
+  "MCP_SERVER_VERSION": "2.16.2",
+  "SENTRY_ENABLED": "false",
+  "SENTRY_DSN": "",
+  "SENTRY_ENV": "",
+  "SENTRY_RELEASE": "",
+  "SENTRY_SEND_DEFAULT_PII": "false",
+  "SENTRY_AUTH_TOKEN": ""
+}
+```
+
+The same set as JSON, for the `environment` block of a client config (`mcp.servers.<name>` in opencode.json, `mcpServers.<name>` in claude_desktop_config.json). Empty values are read as unset.
+
+**Sentry**, only if you want error reporting. All six keys ship in the JSON above:
+
+- `SENTRY_ENABLED` - master switch; off means nothing is ever sent.
+- `SENTRY_DSN` - client key of your Sentry project. Without it the server stays off and says so on stderr.
+- `SENTRY_ENV` - environment tag on every event (`local` by default).
+- `SENTRY_RELEASE` - version tag on every event (`0.0.1-SNAPSHOT` by default, inherited from the Java config).
+- `SENTRY_SEND_DEFAULT_PII` - let Sentry attach IPs and user agents (`false` by default).
+- `SENTRY_AUTH_TOKEN` - build token of the Java setup, accepted for config parity and ignored at runtime.
 
 **Limits.** Result sets are capped at 1000 rows. Three timeout layers: statement 120 s, socket 30 s, MCP request watchdog 150 s. Identifiers are validated against `^[A-Za-z][A-Za-z0-9_$#]{0,127}$`; literals are escaped (`'` -> `''`).
 

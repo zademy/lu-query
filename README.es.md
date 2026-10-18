@@ -105,23 +105,80 @@ El pool es perezoso: el server arranca y responde `initialize` sin base de datos
 
 ## Configuración
 
-| Variable                      | Requerida | Default              | Propósito                                                                                                   |
-| ----------------------------- | --------- | -------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `ORACLE_DB_URL`               | sí        | —                    | Cadena de conexión: JDBC (`jdbc:oracle:thin:@//host:1521/service`) o easy-connect (`host:1521/service`)     |
-| `ORACLE_DB_USERNAME`          | sí        | —                    | Usuario de base de datos                                                                                    |
-| `ORACLE_DB_PASSWORD`          | sí        | —                    | Contraseña                                                                                                  |
-| `ORACLE_DB_SCHEMA`            | no        | default de sesión    | Schema fijado con `ALTER SESSION SET CURRENT_SCHEMA` en cada sesión del pool                                |
-| `ORACLE_POOL_SIZE`            | no        | `4`                  | Tamaño del pool de conexiones                                                                               |
-| `MCP_SERVER_VERSION`          | no        | `2.13.0`             | Versión que reporta el server                                                                               |
-| `MCP_AUDIT_ENABLED`           | no        | `true`               | Auditoría activada por defecto — único cambio de contrato contra el server Java (que defaulteaba a `false`) |
-| `MCP_AUDIT_DIR`               | no        | `./mcp-audit-logs`   | Directorio de los Markdown de auditoría                                                                     |
-| `SENTRY_ENABLED`              | no        | `false`              | Reporte de errores a Sentry                                                                                 |
-| `SENTRY_DSN`                  | si Sentry | —                    | DSN de Sentry                                                                                               |
-| `SENTRY_ENV`                  | no        | —                    | Ambiente Sentry                                                                                             |
-| `SENTRY_RELEASE`              | no        | `MCP_SERVER_VERSION` | Release Sentry                                                                                              |
-| `SENTRY_SEND_DEFAULT_PII`     | no        | `false`              | PII en eventos Sentry                                                                                       |
-| `SENTRY_AUTH_TOKEN`           | no        | —                    | Aceptada por paridad de configuración; sin uso en runtime (`@sentry/node` no la tiene)                      |
-| `LOG_LEVEL` / `APP_LOG_LEVEL` | no        | `INFO`               | Nivel de log del server                                                                                     |
+| Variable                      | Requerida | Default             | Propósito                                                                                                   |
+| ----------------------------- | --------- | ------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `ORACLE_DB_URL`               | sí        | —                   | Cadena de conexión: JDBC (`jdbc:oracle:thin:@//host:1521/service`) o easy-connect (`host:1521/service`)     |
+| `ORACLE_DB_USERNAME`          | sí        | —                   | Usuario de base de datos                                                                                    |
+| `ORACLE_DB_PASSWORD`          | sí        | —                   | Contraseña                                                                                                  |
+| `ORACLE_DB_SCHEMA`            | no        | default de sesión   | Schema fijado con `ALTER SESSION SET CURRENT_SCHEMA` en cada sesión del pool                                |
+| `ORACLE_POOL_SIZE`            | no        | `4`                 | Tamaño del pool de conexiones                                                                               |
+| `MCP_SERVER_VERSION`          | no        | versión del paquete | Versión que reporta el server                                                                               |
+| `MCP_AUDIT_ENABLED`           | no        | `true`              | Auditoría activada por defecto — único cambio de contrato contra el server Java (que defaulteaba a `false`) |
+| `MCP_AUDIT_DIR`               | no        | `./mcp-audit-logs`  | Directorio de los Markdown de auditoría                                                                     |
+| `SENTRY_ENABLED`              | no        | `false`             | Reporte de errores a Sentry                                                                                 |
+| `SENTRY_DSN`                  | si Sentry | —                   | DSN de Sentry                                                                                               |
+| `SENTRY_ENV`                  | no        | `local`             | Ambiente Sentry                                                                                             |
+| `SENTRY_RELEASE`              | no        | `0.0.1-SNAPSHOT`    | Release Sentry                                                                                              |
+| `SENTRY_SEND_DEFAULT_PII`     | no        | `false`             | PII en eventos Sentry                                                                                       |
+| `SENTRY_AUTH_TOKEN`           | no        | —                   | Aceptada por paridad de configuración; sin uso en runtime (`@sentry/node` no la tiene)                      |
+| `LOG_LEVEL` / `APP_LOG_LEVEL` | no        | `INFO`              | Nivel de log del server                                                                                     |
+
+Todas juntas, listas para pegar. Solo las tres primeras son obligatorias; si quitas cualquier otra línea aplica el default de la tabla. Los mismos nombres van en el bloque `environment` de la config de un cliente MCP.
+
+```bash
+# obligatorias
+export ORACLE_DB_URL='jdbc:oracle:thin:@//db.host:1521/FREEPDB1'
+export ORACLE_DB_USERNAME='app_user'
+export ORACLE_DB_PASSWORD='change-me'
+
+# opcionales
+export ORACLE_DB_SCHEMA='APP'             # fija un schema en vez del del usuario conectado
+export ORACLE_POOL_SIZE='8'                # conexiones abiertas (default 4)
+export MCP_AUDIT_ENABLED='true'            # auditoría Markdown de sesión on/off
+export MCP_AUDIT_DIR='/var/log/lu-query'  # ruta absoluta, o cae en el cwd del cliente
+export LOG_LEVEL='INFO'                    # APP_LOG_LEVEL también funciona
+export SENTRY_ENABLED='false'              # apagado hasta que pongas SENTRY_DSN
+
+# Sentry, solo si reportas errores (valores de tu proyecto en Sentry)
+# export SENTRY_DSN='https://key@sentry.io/1234567'
+# export SENTRY_ENV='production'
+# export SENTRY_RELEASE='2.16.2'
+# export SENTRY_SEND_DEFAULT_PII='false'
+# export SENTRY_AUTH_TOKEN=''
+
+# export MCP_SERVER_VERSION='2.16.2'       # solo para fijar la versión que se reporta
+```
+
+```json
+{
+  "ORACLE_DB_URL": "jdbc:oracle:thin:@//db.host:1521/FREEPDB1",
+  "ORACLE_DB_USERNAME": "app_user",
+  "ORACLE_DB_PASSWORD": "change-me",
+  "ORACLE_DB_SCHEMA": "APP",
+  "ORACLE_POOL_SIZE": "8",
+  "MCP_AUDIT_ENABLED": "true",
+  "MCP_AUDIT_DIR": "/var/log/lu-query",
+  "LOG_LEVEL": "INFO",
+  "MCP_SERVER_VERSION": "2.16.2",
+  "SENTRY_ENABLED": "false",
+  "SENTRY_DSN": "",
+  "SENTRY_ENV": "",
+  "SENTRY_RELEASE": "",
+  "SENTRY_SEND_DEFAULT_PII": "false",
+  "SENTRY_AUTH_TOKEN": ""
+}
+```
+
+El mismo set en JSON, para el bloque `environment` de la config de un cliente (`mcp.servers.<nombre>` en opencode.json, `mcpServers.<nombre>` en claude_desktop_config.json). Un valor vacío se lee como no definido.
+
+**Sentry**, solo si quieres reportar errores. Las seis claves ya están en el JSON de arriba:
+
+- `SENTRY_ENABLED` - interruptor maestro; apagado no se envía nada.
+- `SENTRY_DSN` - client key de tu proyecto en Sentry. Sin ella el server sigue apagado y lo avisa por stderr.
+- `SENTRY_ENV` - etiqueta de ambiente en cada evento (`local` por defecto).
+- `SENTRY_RELEASE` - etiqueta de versión en cada evento (`0.0.1-SNAPSHOT` por defecto, heredado de la config del Java).
+- `SENTRY_SEND_DEFAULT_PII` - deja que Sentry adjunte IPs y user agents (`false` por defecto).
+- `SENTRY_AUTH_TOKEN` - token de build del setup en Java, se acepta por paridad de config y se ignora en runtime.
 
 **Límites.** Los resultsets se cupan a 1000 filas. Tres capas de timeout: sentencia 120 s, socket 30 s, watchdog de request MCP 150 s. Los identificadores se validan contra `^[A-Za-z][A-Za-z0-9_$#]{0,127}$`; los literales se escapan (`'` -> `''`).
 
