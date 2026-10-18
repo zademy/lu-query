@@ -182,6 +182,12 @@ The same set as JSON, for the `environment` block of a client config (`mcp.serve
 
 **Limits.** Result sets are capped at 1000 rows. Three timeout layers: statement 120 s, socket 30 s, MCP request watchdog 150 s. Identifiers are validated against `^[A-Za-z][A-Za-z0-9_$#]{0,127}$`; literals are escaped (`'` -> `''`).
 
+## Architecture reference
+
+The whole server on one page: the execution path from the MCP client to Oracle, the 75 tools by domain, the agent interface (prompts, resource templates, skills), the built-in control points, the three DML paths and the audit trail.
+
+![lu-query architecture reference](https://raw.githubusercontent.com/zademy/lu-query/master/docs/architecture-reference.en.png)
+
 ## Session audit
 
 Every session writes one Markdown file `lu-query-<timestamp>-log.md` in `MCP_AUDIT_DIR`, with one entry per tool execution: tool name, statement kind (SELECT, INSERT, ...) and type (READ/WRITE/OTHER), duration, rows, parameters and the SQL verbatim.
