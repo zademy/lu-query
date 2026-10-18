@@ -157,7 +157,7 @@ describe('describe_plsql', () => {
       harness.dataAccess
         .on(
           (c) => c.sql.includes('SYS_CONTEXT'),
-          () => ({ rows: [{ current_schema: DEVUSER }] }),
+          () => ({ rows: [{ CURRENT_SCHEMA: DEVUSER }] }),
         )
         .on(
           (c) => c.method === 'queryForList' && c.sql.includes('all_arguments'),

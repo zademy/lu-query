@@ -64,8 +64,9 @@ export interface OraclePoolAttributes {
   poolAlias: string;
   sessionCallback?: OracleSessionCallback;
   /**
-   * Columnas que se traen como string en vez de Lob/Readable; sin esto el
-   * thin corta los DDL de DBMS_METADATA a 4000 caracteres.
+   * fetchAsString a nivel de pool es un no-op en node-oracledb v6: solo
+   * funciona como opcion global del modulo. El fetch de los LOB se resuelve
+   * con fetchTypeHandler en cada execute (ver pool.ts).
    */
   fetchAsString?: unknown[];
 }
@@ -78,8 +79,14 @@ export interface OracleModule {
   BIND_OUT: number;
   NUMBER: number;
   DATE: number;
-  /** Tipo de bind para parámetros REF CURSOR (driver: DB_TYPE_CURSOR). */
+  /** Tipo de bind para parametros REF CURSOR (driver: DB_TYPE_CURSOR). */
   DB_TYPE_CURSOR: unknown;
+  /** Tipos de columna que el driver puede materializar de otra forma. */
+  DB_TYPE_CLOB: unknown;
+  DB_TYPE_NCLOB: unknown;
+  DB_TYPE_BLOB: unknown;
+  DB_TYPE_VARCHAR: unknown;
+  DB_TYPE_RAW: unknown;
   createPool(attributes: OraclePoolAttributes): Promise<OraclePool>;
 }
 

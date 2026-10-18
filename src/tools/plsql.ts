@@ -1,13 +1,13 @@
 import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withToolContext } from '../audit/context.js';
 import { resolveSchemaFor } from '../catalog/schema.js';
 import { MAX_ROWS } from '../config.js';
 import type { DataAccess } from '../db/data-access.js';
 import type { OracleBind, OracleCallBind } from '../db/oracle-types.js';
-import { SecurityError, guardTool } from '../errors.js';
+import { SecurityError } from '../errors.js';
 import { assertIdentifier } from '../security/identifiers.js';
 import type { ServerContext } from '../server.js';
+import { jsonResult, plainResource, vTool } from './mcp.js';
 
 /**
  * Plsql — describe_plsql, call_procedure y el recurso plsql-source
@@ -277,97 +277,80 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function plain(
-  uri: string,
-  text: string,
-): { contents: { uri: string; mimeType: string; text: string }[] } {
-  return { contents: [{ uri, mimeType: 'text/plain', text }] };
-}
-
 const PLSQL_URI = 'oracle://schema/{schema}/plsql/{object}';
 
 /** Registro de las dos tools y del recurso (`PlsqlTools`/`OracleResources`). */
 export function registerPlsql(ctx: ServerContext): void {
   const { dataAccess } = ctx;
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'describe_plsql',
+    'Describe a PL/SQL object: returns its arguments (name, data type, in/out, position) and full source code. Read-only.',
     {
-      description:
-        'Describe a PL/SQL object: returns its arguments (name, data type, in/out, position) and full source code. Read-only.',
-      inputSchema: {
-        schema: z
-          .string()
-          .describe(
-            "Schema (owner) of the object. Optional — defaults to the server's current schema; omit rather than guess.",
-          )
-          .optional(),
-        name: z.string().describe('Object name (procedure, function or package).'),
-        type: z
-          .string()
-          .describe("Object type, e.g. 'PROCEDURE', 'FUNCTION', 'PACKAGE' or 'PACKAGE BODY'.")
-          .optional(),
-      },
+      schema: z
+        .string()
+        .describe(
+          "Schema (owner) of the object. Optional — defaults to the server's current schema; omit rather than guess.",
+        )
+        .optional(),
+      name: z.string().describe('Object name (procedure, function or package).'),
+      type: z
+        .string()
+        .describe("Object type, e.g. 'PROCEDURE', 'FUNCTION', 'PACKAGE' or 'PACKAGE BODY'.")
+        .optional(),
     },
-    async (args) =>
-      withToolContext('describe_plsql', args, () =>
-        guardTool(async () => {
-          const schema = await resolveSchemaFor(ctx, args.schema, 'describe_plsql');
-          const described = await describePlsql(dataAccess, schema, args.name, args.type);
-          return { content: [{ type: 'text' as const, text: JSON.stringify(described) }] };
-        }),
-      ),
+    async (dataAccess, args) => {
+      const schema = await resolveSchemaFor(ctx, args.schema, 'describe_plsql');
+      const described = await describePlsql(dataAccess, schema, args.name, args.type);
+      return jsonResult(described);
+    },
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'call_procedure',
+    'Execute a PL/SQL procedure, function or package subprogram with typed arguments. Supports IN/OUT/INOUT scalar parameters and function return values via typed binds (SYS_REFCURSOR OUT/return arguments are fetched and returned as row arrays). Pass args as a JSON array: [{"name":"P","direction":"IN","dataType":"NUMBER","value":1}]. PL/SQL BOOLEAN/RECORD/TABLE/VARRAY/OBJECT types are rejected with guidance to create a scalar wrapper. Requires GRANT EXECUTE on the target object. Auto-commits like execute_dml.',
     {
-      description:
-        'Execute a PL/SQL procedure, function or package subprogram with typed arguments. Supports IN/OUT/INOUT scalar parameters and function return values via typed binds (SYS_REFCURSOR OUT/return arguments are fetched and returned as row arrays). Pass args as a JSON array: [{"name":"P","direction":"IN","dataType":"NUMBER","value":1}]. PL/SQL BOOLEAN/RECORD/TABLE/VARRAY/OBJECT types are rejected with guidance to create a scalar wrapper. Requires GRANT EXECUTE on the target object. Auto-commits like execute_dml.',
-      inputSchema: {
-        schema: z
-          .string()
-          .describe(
-            "Schema (owner) of the object. Optional — defaults to the server's current schema; omit rather than guess.",
-          )
-          .optional(),
-        name: z
-          .string()
-          .describe('Object name; optionally qualified as PKG.PROC for a package subprogram.'),
-        args: z
-          .string()
-          .describe(
-            'Arguments as a JSON array: [{"name":"P","direction":"IN|OUT|INOUT","dataType":"NUMBER","value":1}].',
-          ),
-        isFunction: z
-          .boolean()
-          .describe(
-            'Set true if the object is a function (registers a return slot and populates returnValue).',
-          )
-          .optional(),
-        returnType: z
-          .string()
-          .describe(
-            'Oracle return type for functions (e.g. NUMBER, VARCHAR2, REF CURSOR). Ignored for procedures.',
-          )
-          .optional(),
-      },
+      schema: z
+        .string()
+        .describe(
+          "Schema (owner) of the object. Optional — defaults to the server's current schema; omit rather than guess.",
+        )
+        .optional(),
+      name: z
+        .string()
+        .describe('Object name; optionally qualified as PKG.PROC for a package subprogram.'),
+      args: z
+        .string()
+        .describe(
+          'Arguments as a JSON array: [{"name":"P","direction":"IN|OUT|INOUT","dataType":"NUMBER","value":1}].',
+        ),
+      isFunction: z
+        .boolean()
+        .describe(
+          'Set true if the object is a function (registers a return slot and populates returnValue).',
+        )
+        .optional(),
+      returnType: z
+        .string()
+        .describe(
+          'Oracle return type for functions (e.g. NUMBER, VARCHAR2, REF CURSOR). Ignored for procedures.',
+        )
+        .optional(),
     },
-    async (args) =>
-      withToolContext('call_procedure', args, () =>
-        guardTool(async () => {
-          const schema = await resolveSchemaFor(ctx, args.schema, 'call_procedure');
-          const result = await callProcedure(
-            dataAccess,
-            schema,
-            args.name,
-            args.args,
-            args.isFunction ?? false,
-            args.returnType,
-          );
-          return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
-        }),
-      ),
+    async (dataAccess, args) => {
+      const schema = await resolveSchemaFor(ctx, args.schema, 'call_procedure');
+      const result = await callProcedure(
+        dataAccess,
+        schema,
+        args.name,
+        args.args,
+        args.isFunction ?? false,
+        args.returnType,
+      );
+      return jsonResult(result);
+    },
   );
 
   ctx.server.registerResource(
@@ -385,14 +368,14 @@ export function registerPlsql(ctx: ServerContext): void {
       try {
         const described = await describePlsql(dataAccess, schema, object, undefined);
         if (described.source.trim() === '') {
-          return plain(
+          return plainResource(
             uri.href,
             `(No PL/SQL source found for ${schema}.${object} — the object may not exist or is not a PL/SQL object.)`,
           );
         }
-        return plain(uri.href, `-- ${schema}.${object}\n\n${described.source}`);
+        return plainResource(uri.href, `-- ${schema}.${object}\n\n${described.source}`);
       } catch (error) {
-        return plain(
+        return plainResource(
           uri.href,
           `(Database error reading PL/SQL source for ${schema}.${object}: ${message(error)})`,
         );

@@ -1,19 +1,16 @@
 import { z } from 'zod';
-import { withToolContext } from '../audit/context.js';
 import { MAX_ROWS } from '../config.js';
 import type { DataAccess } from '../db/data-access.js';
 import type { OracleRow } from '../db/oracle-types.js';
-import { guardTool, SecurityError } from '../errors.js';
+import { SecurityError } from '../errors.js';
 import { assertIdentifier } from '../security/identifiers.js';
 import type { ServerContext } from '../server.js';
 import { buildPagedSelect, clampMaxRows, clampPage, type Page } from '../sql/capped-select.js';
 import { detectStatementKind } from '../sql/kind.js';
+import { jsonResult, progressReporter, vTool } from './mcp.js';
 
 /** Filas por defecto de `get_sample_data` (`oracle.mcp.default-sample-rows`). */
 const DEFAULT_SAMPLE_ROWS = 10;
-
-/** Escala de las notificaciones de progreso MCP (10 al empezar, 90 al terminar). */
-const PROGRESS_TOTAL = 100;
 
 /** Resultado de una lectura, con los mismos campos que el record QueryResult del Java. */
 export interface QueryResult {
@@ -114,92 +111,51 @@ async function sampleData(
   return toResult(rows, { offset: 0, limit });
 }
 
-function json(value: QueryResult): { type: 'text'; text: string } {
-  return { type: 'text', text: JSON.stringify(value) };
-}
-
-/**
- * Notificador de progreso MCP: solo existe si el cliente pidió token en la
- * petición. Los fallos se tragan: el progreso es informativo, no un resultado.
- */
-function progressReporter(
-  ctx: ServerContext,
-  token: string | number | undefined,
-  requestId: string | number,
-): (progress: number, message: string) => void {
-  if (token === undefined) return () => undefined;
-
-  return (progress, message) => {
-    void ctx.server.server
-      .notification(
-        {
-          method: 'notifications/progress',
-          params: { progressToken: token, progress, total: PROGRESS_TOTAL, message },
-        },
-        { relatedRequestId: requestId },
-      )
-      .catch(() => undefined);
-  };
-}
-
 /** Query — la herramienta de lectura: run_query y get_sample_data. */
 export function registerQuery(ctx: ServerContext): void {
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'run_query',
+    'Run a single SELECT statement and return the result set. Optional offset/limit enable stateless pagination (non-deterministic without an ORDER BY in the SQL). Non-SELECT statements or privilege failures return an Oracle error string. NOTE: recursive constructs like CONNECT BY and WITH (CTE) may be rejected by the SQL parser; for set differences use MINUS, and for row-number/gap problems prefer computing on the returned result set rather than relying on recursive SQL.',
     {
-      description:
-        'Run a single SELECT statement and return the result set. Optional offset/limit enable stateless pagination (non-deterministic without an ORDER BY in the SQL). Non-SELECT statements or privilege failures return an Oracle error string. NOTE: recursive constructs like CONNECT BY and WITH (CTE) may be rejected by the SQL parser; for set differences use MINUS, and for row-number/gap problems prefer computing on the returned result set rather than relying on recursive SQL.',
-      inputSchema: {
-        sql: z.string().describe('A single SELECT statement.'),
-        offset: z
-          .number()
-          .int()
-          .describe('0-based row offset for pagination. Defaults to 0.')
-          .optional(),
-        limit: z
-          .number()
-          .int()
-          .describe(
-            'Maximum rows to return for this page. Capped at the server max-rows. Defaults to the server max.',
-          )
-          .optional(),
-      },
+      sql: z.string().describe('A single SELECT statement.'),
+      offset: z
+        .number()
+        .int()
+        .describe('0-based row offset for pagination. Defaults to 0.')
+        .optional(),
+      limit: z
+        .number()
+        .int()
+        .describe(
+          'Maximum rows to return for this page. Capped at the server max-rows. Defaults to the server max.',
+        )
+        .optional(),
     },
-    async (args) =>
-      // El contexto de auditoría viaja por AsyncLocalStorage hasta el DataAccess.
-      withToolContext('run_query', args, () =>
-        guardTool(async () => ({ content: [json(await runQuery(ctx.dataAccess, args))] })),
-      ),
+    async (dataAccess, args) => jsonResult(await runQuery(ctx.dataAccess, args)),
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'get_sample_data',
+    'Return the first N rows of a table as a quick data preview.',
     {
-      description: 'Return the first N rows of a table as a quick data preview.',
-      inputSchema: {
-        schema: z.string().describe('Schema (owner) of the table.').optional(),
-        table: z.string().describe('Table name.'),
-        rows: z
-          .number()
-          .int()
-          .describe('Number of rows to return. Defaults to the server default (10).')
-          .optional(),
-      },
+      schema: z.string().describe('Schema (owner) of the table.').optional(),
+      table: z.string().describe('Table name.'),
+      rows: z
+        .number()
+        .int()
+        .describe('Number of rows to return. Defaults to the server default (10).')
+        .optional(),
     },
-    async (args, extra) =>
-      withToolContext('get_sample_data', args, () =>
-        guardTool(async () => ({
-          content: [
-            json(
-              await sampleData(
-                ctx.dataAccess,
-                ctx.config.schema,
-                args,
-                progressReporter(ctx, extra._meta?.progressToken, extra.requestId),
-              ),
-            ),
-          ],
-        })),
+    async (dataAccess, args, extra) =>
+      jsonResult(
+        await sampleData(
+          ctx.dataAccess,
+          ctx.config.schema,
+          args,
+          progressReporter(ctx, extra._meta?.progressToken, extra.requestId),
+        ),
       ),
   );
 }

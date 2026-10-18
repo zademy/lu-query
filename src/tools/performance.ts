@@ -1,8 +1,9 @@
+import { likePattern } from '../sql/text.js';
 import { z } from 'zod';
-import { withToolContext } from '../audit/context.js';
 import type { DataAccess } from '../db/data-access.js';
 import type { OracleBind, OracleRow } from '../db/oracle-types.js';
-import { DataAccessError, guardTool } from '../errors.js';
+import { catalogResult, vTool } from './mcp.js';
+import { DataAccessError } from '../errors.js';
 import type { ServerContext } from '../server.js';
 
 /**
@@ -144,14 +145,6 @@ ORDER BY ${column} DESC
 FETCH FIRST :limit ROWS ONLY`;
 }
 
-/** Substring del cliente → patrón LIKE de Oracle (`LikePatterns` del Java). */
-function likePattern(name?: string): string {
-  const pattern = name?.trim() ?? '';
-  if (pattern === '') return '%';
-  if (pattern.includes('%') || pattern.includes('_')) return pattern.toUpperCase();
-  return `%${pattern.toUpperCase()}%`;
-}
-
 /** Fallo de privilegio con el hint del grant, o el error tal cual si es otro. */
 function withGrantHint(error: unknown): unknown {
   const message = error instanceof Error ? error.message : String(error);
@@ -280,30 +273,6 @@ export async function listDatafileIo(dataAccess: DataAccess): Promise<OracleRow[
  * Un `string` (el SQL de una sesión) viaja como texto plano porque así lo
  * devuelve el Java; el resto, como JSON.
  */
-function vTool<Args extends Record<string, unknown> = Record<string, unknown>>(
-  ctx: ServerContext,
-  name: string,
-  description: string,
-  shape: Record<string, z.ZodTypeAny>,
-  run: (dataAccess: DataAccess, args: Args) => Promise<unknown>,
-): void {
-  ctx.server.registerTool(name, { description, inputSchema: shape }, async (args) =>
-    // El contexto de auditoría viaja por AsyncLocalStorage hasta el DataAccess.
-    withToolContext(name, args, () =>
-      guardTool(async () => {
-        const result = await run(ctx.dataAccess, args as Args);
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: typeof result === 'string' ? result : JSON.stringify(result),
-            },
-          ],
-        };
-      }),
-    ),
-  );
-}
 
 const SID_FILTER = {
   sid: z.number().int().describe('Optional session id (SID) filter.').optional(),
@@ -319,7 +288,7 @@ export function registerPerformance(ctx: ServerContext): void {
       username: z.string().describe('Optional Oracle username filter.').optional(),
       ...SID_FILTER,
     },
-    listActiveSessions,
+    async (dataAccess, args) => catalogResult(await listActiveSessions(dataAccess, args)),
   );
 
   vTool(
@@ -327,7 +296,7 @@ export function registerPerformance(ctx: ServerContext): void {
     'list_blocked_sessions',
     'List sessions currently blocked by another session, with the blocker sid/username/program and the wait event being waited on.',
     {},
-    listBlockedSessions,
+    async (dataAccess, _args) => catalogResult(await listBlockedSessions(dataAccess)),
   );
 
   vTool(
@@ -335,7 +304,7 @@ export function registerPerformance(ctx: ServerContext): void {
     'list_locks',
     'List DML/transaction/user locks held and requested, with the locked object name and lock mode (decoded).',
     {},
-    listLocks,
+    async (dataAccess, _args) => catalogResult(await listLocks(dataAccess)),
   );
 
   vTool(
@@ -346,7 +315,7 @@ export function registerPerformance(ctx: ServerContext): void {
       sid: z.number().int().describe('Session id (SID).'),
       serialNum: z.number().int().describe('Session serial number.'),
     },
-    getSessionSqlText,
+    async (dataAccess, args) => catalogResult(await getSessionSqlText(dataAccess, args)),
   );
 
   vTool(
@@ -362,7 +331,7 @@ export function registerPerformance(ctx: ServerContext): void {
         .optional(),
       limit: z.number().int().describe('Number of rows to return (default 10).').optional(),
     },
-    listTopSql,
+    async (dataAccess, args) => catalogResult(await listTopSql(dataAccess, args)),
   );
 
   vTool(
@@ -376,7 +345,7 @@ export function registerPerformance(ctx: ServerContext): void {
         .describe("Optional wait class filter (e.g. 'User I/O', 'Application').")
         .optional(),
     },
-    getWaitEvents,
+    async (dataAccess, args) => catalogResult(await getWaitEvents(dataAccess, args)),
   );
 
   vTool(
@@ -384,7 +353,7 @@ export function registerPerformance(ctx: ServerContext): void {
     'get_session_longops',
     'List long-running operations from V$SESSION_LONGOPS (backups, stats gathering, long queries) with progress percentage and ETA. Optional sid filter; only in-progress ops shown.',
     SID_FILTER,
-    getSessionLongops,
+    async (dataAccess, args) => catalogResult(await getSessionLongops(dataAccess, args)),
   );
 
   vTool(
@@ -392,7 +361,7 @@ export function registerPerformance(ctx: ServerContext): void {
     'get_instance_info',
     'Return Oracle instance information: name, host, version, startup time, status, archiver, thread.',
     {},
-    getInstanceInfo,
+    async (dataAccess, _args) => catalogResult(await getInstanceInfo(dataAccess)),
   );
 
   vTool(
@@ -400,7 +369,7 @@ export function registerPerformance(ctx: ServerContext): void {
     'get_database_info',
     'Return database-level information: name, creation date, log mode (archivelog/noarchivelog), open mode, role, flashback status.',
     {},
-    getDatabaseInfo,
+    async (dataAccess, _args) => catalogResult(await getDatabaseInfo(dataAccess)),
   );
 
   vTool(
@@ -408,7 +377,7 @@ export function registerPerformance(ctx: ServerContext): void {
     'get_system_stats',
     'Return cumulative system statistics from V$SYSSTAT (parse count, execute count, DB time, physical reads/writes, etc.).',
     {},
-    getSystemStats,
+    async (dataAccess, _args) => catalogResult(await getSystemStats(dataAccess)),
   );
 
   vTool(
@@ -416,7 +385,7 @@ export function registerPerformance(ctx: ServerContext): void {
     'get_db_time_model',
     'Return the database time model from V$SYS_TIME_MODEL: DB CPU, DB time, parse time elapsed, hard parse elapsed, etc.',
     {},
-    getDbTimeModel,
+    async (dataAccess, _args) => catalogResult(await getDbTimeModel(dataAccess)),
   );
 
   vTool(
@@ -431,7 +400,7 @@ export function registerPerformance(ctx: ServerContext): void {
         )
         .optional(),
     },
-    getParameter,
+    async (dataAccess, args) => catalogResult(await getParameter(dataAccess, args)),
   );
 
   vTool(
@@ -439,6 +408,6 @@ export function registerPerformance(ctx: ServerContext): void {
     'list_datafile_io',
     'List datafiles with size, physical reads/writes, block reads/writes and average IO time per file.',
     {},
-    listDatafileIo,
+    async (dataAccess, _args) => catalogResult(await listDatafileIo(dataAccess)),
   );
 }

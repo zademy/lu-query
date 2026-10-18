@@ -1,6 +1,6 @@
 # Verified examples - schema exploration
 
-Oracle Database 26ai Free (23.26.0.0.0), lu-query 2.13.0, MCP over stdio, 2026-10-17. Outputs quoted verbatim (trimmed where noted). Fixtures: see `skills/README.md`.
+Oracle Database 26ai Free (23.26.3.0.0), lu-query 2.16.3, MCP over stdio, 2026-10-18. Outputs quoted verbatim (trimmed where noted). Fixtures: see `skills/README.md`.
 
 ## Find tables by pattern
 

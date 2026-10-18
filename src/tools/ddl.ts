@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { withToolContext } from '../audit/context.js';
+import { SecurityError } from '../errors.js';
 import { resolveSchemaFor } from '../catalog/schema.js';
-import { guardTool, SecurityError } from '../errors.js';
 import { qualifiedName, quoteCsv, quoteIdentifier, quoteLiteral } from '../security/identifiers.js';
 import type { ServerContext } from '../server.js';
+import { rawResult, vTool } from './mcp.js';
 
 /**
  * Ddl — comentarios de metadata y helpers DDL estilo create, port 1:1 del
@@ -25,21 +25,8 @@ function optionalSchema(owner: string) {
   return z.string().describe(`${owner}${SCHEMA_OPTIONAL}`).optional();
 }
 
-/** Schema efectivo: el pedido gana; si no, el configurado (o error si no hay). */
-async function owner(
-  ctx: ServerContext,
-  requested: string | undefined,
-  tool: string,
-): Promise<string> {
-  return resolveSchemaFor(ctx, requested, tool);
-}
-
-function text(value: string): { type: 'text'; text: string } {
-  return { type: 'text', text: value };
-}
-
 async function commentOnTable(ctx: ServerContext, args: CommentArgs): Promise<string> {
-  const schema = await owner(ctx, args.schema, 'comment_on_table');
+  const schema = await resolveSchemaFor(ctx, args.schema, 'comment_on_table');
   await ctx.dataAccess.execute(
     `COMMENT ON TABLE ${qualifiedName(schema, args.table)} IS ${quoteLiteral(args.comment)}`,
   );
@@ -47,7 +34,7 @@ async function commentOnTable(ctx: ServerContext, args: CommentArgs): Promise<st
 }
 
 async function commentOnColumn(ctx: ServerContext, args: ColumnCommentArgs): Promise<string> {
-  const schema = await owner(ctx, args.schema, 'comment_on_column');
+  const schema = await resolveSchemaFor(ctx, args.schema, 'comment_on_column');
   await ctx.dataAccess.execute(
     `COMMENT ON COLUMN ${qualifiedName(schema, args.table)}.${quoteIdentifier(args.column, 'columna')} IS ${quoteLiteral(args.comment)}`,
   );
@@ -55,7 +42,7 @@ async function commentOnColumn(ctx: ServerContext, args: ColumnCommentArgs): Pro
 }
 
 async function createOrReplaceView(ctx: ServerContext, args: ViewArgs): Promise<string> {
-  const schema = await owner(ctx, args.schema, 'create_or_replace_view');
+  const schema = await resolveSchemaFor(ctx, args.schema, 'create_or_replace_view');
   // Oracle es quien parsea el cuerpo; solo se comprueba que sea un SELECT.
   if (!args.selectBody.trim().toUpperCase().startsWith('SELECT')) {
     throw new SecurityError('selectBody must be a SELECT statement.');
@@ -67,7 +54,7 @@ async function createOrReplaceView(ctx: ServerContext, args: ViewArgs): Promise<
 }
 
 async function createSynonym(ctx: ServerContext, args: SynonymArgs): Promise<string> {
-  const schema = await owner(ctx, args.schema, 'create_synonym');
+  const schema = await resolveSchemaFor(ctx, args.schema, 'create_synonym');
   await ctx.dataAccess.execute(
     `CREATE ${args.isPublic ? 'PUBLIC ' : ''}SYNONYM ${qualifiedName(schema, args.synonym)} FOR ${qualifiedName(args.targetSchema, args.targetName)}`,
   );
@@ -75,7 +62,7 @@ async function createSynonym(ctx: ServerContext, args: SynonymArgs): Promise<str
 }
 
 async function createSequence(ctx: ServerContext, args: SequenceArgs): Promise<string> {
-  const schema = await owner(ctx, args.schema, 'create_sequence');
+  const schema = await resolveSchemaFor(ctx, args.schema, 'create_sequence');
   if (args.incrementBy === 0) {
     throw new SecurityError('incrementBy must be non-zero (Oracle INCREMENT BY 0 is invalid).');
   }
@@ -92,7 +79,7 @@ async function createSequence(ctx: ServerContext, args: SequenceArgs): Promise<s
 }
 
 async function createIndex(ctx: ServerContext, args: IndexArgs): Promise<string> {
-  const schema = await owner(ctx, args.schema, 'create_index');
+  const schema = await resolveSchemaFor(ctx, args.schema, 'create_index');
   if (args.columns.length === 0) {
     throw new SecurityError('At least one column is required.');
   }
@@ -104,7 +91,7 @@ async function createIndex(ctx: ServerContext, args: IndexArgs): Promise<string>
 }
 
 async function createMviewLog(ctx: ServerContext, args: MviewLogArgs): Promise<string> {
-  const schema = await owner(ctx, args.schema, 'create_mview_log');
+  const schema = await resolveSchemaFor(ctx, args.schema, 'create_mview_log');
   const withRowid = args.withRowid ?? false;
   const withPrimaryKey = args.withPrimaryKey ?? false;
   if (!withRowid && !withPrimaryKey) {
@@ -177,173 +164,128 @@ interface MviewLogArgs {
 
 /** Ddl — las 7 tools DDL create-style del Java. */
 export function registerDdl(ctx: ServerContext): void {
-  // Patron de las 7 tools: withToolContext abre la entrada de auditoria y
-  // guardTool convierte cualquier excepcion en isError, asi que el handler
-  // nunca propaga errores al transporte.
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'comment_on_table',
+    "Add or replace the comment on a table. Only works for tables the MCP user owns (no system privilege exists for COMMENT on others' objects; you'll get ORA-01031 otherwise).",
     {
-      description:
-        "Add or replace the comment on a table. Only works for tables the MCP user owns (no system privilege exists for COMMENT on others' objects; you'll get ORA-01031 otherwise).",
-      inputSchema: {
-        schema: optionalSchema('Schema (owner) of the table.'),
-        table: z.string().describe('Table name.'),
-        comment: z.string().describe('Comment text. Single quotes are escaped automatically.'),
-      },
+      schema: optionalSchema('Schema (owner) of the table.'),
+      table: z.string().describe('Table name.'),
+      comment: z.string().describe('Comment text. Single quotes are escaped automatically.'),
     },
-    async (args) =>
-      withToolContext('comment_on_table', args, () =>
-        guardTool(async () => ({ content: [text(await commentOnTable(ctx, args))] })),
-      ),
+    async (dataAccess, args) => rawResult(await commentOnTable(ctx, args)),
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'comment_on_column',
+    'Add or replace the comment on a column. Only works for tables the MCP user owns.',
     {
-      description:
-        'Add or replace the comment on a column. Only works for tables the MCP user owns.',
-      inputSchema: {
-        schema: optionalSchema('Schema (owner) of the table.'),
-        table: z.string().describe('Table name.'),
-        column: z.string().describe('Column name.'),
-        comment: z.string().describe('Comment text. Single quotes are escaped automatically.'),
-      },
+      schema: optionalSchema('Schema (owner) of the table.'),
+      table: z.string().describe('Table name.'),
+      column: z.string().describe('Column name.'),
+      comment: z.string().describe('Comment text. Single quotes are escaped automatically.'),
     },
-    async (args) =>
-      withToolContext('comment_on_column', args, () =>
-        guardTool(async () => ({ content: [text(await commentOnColumn(ctx, args))] })),
-      ),
+    async (dataAccess, args) => rawResult(await commentOnColumn(ctx, args)),
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'create_or_replace_view',
+    "Create or replace a view in the MCP user's own schema. Requires CREATE VIEW privilege; Oracle returns ORA-01031 otherwise.",
     {
-      description:
-        "Create or replace a view in the MCP user's own schema. Requires CREATE VIEW privilege; Oracle returns ORA-01031 otherwise.",
-      inputSchema: {
-        schema: optionalSchema(
-          'Schema (owner) for the new view (must be one the MCP user can create in, typically their own).',
+      schema: optionalSchema(
+        'Schema (owner) for the new view (must be one the MCP user can create in, typically their own).',
+      ),
+      view: z.string().describe('View name.'),
+      selectBody: z
+        .string()
+        .describe(
+          'SELECT statement body for the view (e.g. "SELECT id, name FROM owner.table WHERE active = 1").',
         ),
-        view: z.string().describe('View name.'),
-        selectBody: z
-          .string()
-          .describe(
-            'SELECT statement body for the view (e.g. "SELECT id, name FROM owner.table WHERE active = 1").',
-          ),
-      },
     },
-    async (args) =>
-      withToolContext('create_or_replace_view', args, () =>
-        guardTool(async () => ({ content: [text(await createOrReplaceView(ctx, args))] })),
-      ),
+    async (dataAccess, args) => rawResult(await createOrReplaceView(ctx, args)),
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'create_synonym',
+    "Create a private or public synonym pointing at another schema's object. Requires CREATE SYNONYM (private) or CREATE PUBLIC SYNONYM (public); Oracle returns ORA-01031 otherwise.",
     {
-      description:
-        "Create a private or public synonym pointing at another schema's object. Requires CREATE SYNONYM (private) or CREATE PUBLIC SYNONYM (public); Oracle returns ORA-01031 otherwise.",
-      inputSchema: {
-        schema: optionalSchema('Schema where the synonym will live (ignored for PUBLIC).'),
-        synonym: z.string().describe('Synonym name.'),
-        targetSchema: z.string().describe('Schema of the target object.'),
-        targetName: z
-          .string()
-          .describe('Name of the target object (table/view/sequence/procedure).'),
-        isPublic: z
-          .boolean()
-          .describe(
-            'Whether to create a PUBLIC synonym (requires CREATE PUBLIC SYNONYM privilege).',
-          )
-          .optional(),
-      },
+      schema: optionalSchema('Schema where the synonym will live (ignored for PUBLIC).'),
+      synonym: z.string().describe('Synonym name.'),
+      targetSchema: z.string().describe('Schema of the target object.'),
+      targetName: z.string().describe('Name of the target object (table/view/sequence/procedure).'),
+      isPublic: z
+        .boolean()
+        .describe('Whether to create a PUBLIC synonym (requires CREATE PUBLIC SYNONYM privilege).')
+        .optional(),
     },
-    async (args) =>
-      withToolContext('create_synonym', args, () =>
-        guardTool(async () => ({ content: [text(await createSynonym(ctx, args))] })),
-      ),
+    async (dataAccess, args) => rawResult(await createSynonym(ctx, args)),
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'create_sequence',
+    "Create a sequence in the MCP user's own schema. Requires CREATE SEQUENCE privilege; Oracle returns ORA-01031 otherwise.",
     {
-      description:
-        "Create a sequence in the MCP user's own schema. Requires CREATE SEQUENCE privilege; Oracle returns ORA-01031 otherwise.",
-      inputSchema: {
-        schema: optionalSchema('Schema (owner) for the new sequence.'),
-        sequence: z.string().describe('Sequence name.'),
-        startWith: z.number().int().describe('Optional START WITH value.').optional(),
-        incrementBy: z
-          .number()
-          .int()
-          .describe('Optional INCREMENT BY value (can be negative for descending).')
-          .optional(),
-        cache: z
-          .number()
-          .int()
-          .describe('Optional CACHE size (e.g. 20). 0 or omit means NOCACHE.')
-          .optional(),
-        cycle: z
-          .boolean()
-          .describe('Whether to CYCLE when max is reached (default false).')
-          .optional(),
-        order: z
-          .boolean()
-          .describe('Whether to guarantee ORDER (default false, useful in RAC).')
-          .optional(),
-      },
+      schema: optionalSchema('Schema (owner) for the new sequence.'),
+      sequence: z.string().describe('Sequence name.'),
+      startWith: z.number().int().describe('Optional START WITH value.').optional(),
+      incrementBy: z
+        .number()
+        .int()
+        .describe('Optional INCREMENT BY value (can be negative for descending).')
+        .optional(),
+      cache: z
+        .number()
+        .int()
+        .describe('Optional CACHE size (e.g. 20). 0 or omit means NOCACHE.')
+        .optional(),
+      cycle: z
+        .boolean()
+        .describe('Whether to CYCLE when max is reached (default false).')
+        .optional(),
+      order: z
+        .boolean()
+        .describe('Whether to guarantee ORDER (default false, useful in RAC).')
+        .optional(),
     },
-    async (args) =>
-      withToolContext('create_sequence', args, () =>
-        guardTool(async () => ({ content: [text(await createSequence(ctx, args))] })),
-      ),
+    async (dataAccess, args) => rawResult(await createSequence(ctx, args)),
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'create_index',
+    'Create an index on a table. Requires CREATE ANY INDEX (if the table is in another schema) or table ownership; Oracle returns ORA-01031 otherwise.',
     {
-      description:
-        'Create an index on a table. Requires CREATE ANY INDEX (if the table is in another schema) or table ownership; Oracle returns ORA-01031 otherwise.',
-      inputSchema: {
-        schema: optionalSchema('Schema where the index will live.'),
-        index: z.string().describe('Index name.'),
-        tableSchema: z.string().describe('Schema of the target table.'),
-        table: z.string().describe('Target table name.'),
-        columns: z.array(z.string()).describe('Column names to index (JSON array, ordered).'),
-        unique: z
-          .boolean()
-          .describe('Whether to create a UNIQUE index (default false).')
-          .optional(),
-      },
+      schema: optionalSchema('Schema where the index will live.'),
+      index: z.string().describe('Index name.'),
+      tableSchema: z.string().describe('Schema of the target table.'),
+      table: z.string().describe('Target table name.'),
+      columns: z.array(z.string()).describe('Column names to index (JSON array, ordered).'),
+      unique: z.boolean().describe('Whether to create a UNIQUE index (default false).').optional(),
     },
-    async (args) =>
-      withToolContext('create_index', args, () =>
-        guardTool(async () => ({ content: [text(await createIndex(ctx, args))] })),
-      ),
+    async (dataAccess, args) => rawResult(await createIndex(ctx, args)),
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'create_mview_log',
+    'Create a materialized-view log on a table for fast refresh. Requires CREATE TABLE privilege and tablespace quota; Oracle returns ORA-01031 / ORA-01950 otherwise.',
     {
-      description:
-        'Create a materialized-view log on a table for fast refresh. Requires CREATE TABLE privilege and tablespace quota; Oracle returns ORA-01031 / ORA-01950 otherwise.',
-      inputSchema: {
-        schema: optionalSchema('Schema (owner) of the master table.'),
-        table: z.string().describe('Master table name.'),
-        withRowid: z.boolean().describe('Whether to include ROWID columns.').optional(),
-        withPrimaryKey: z
-          .boolean()
-          .describe('Whether to include PRIMARY KEY columns (recommended).')
-          .optional(),
-        includingNewValues: z
-          .boolean()
-          .describe('Whether to add INCLUDING NEW VALUES (enables fast refresh with DML tracking).')
-          .optional(),
-      },
+      schema: optionalSchema('Schema (owner) of the master table.'),
+      table: z.string().describe('Master table name.'),
+      withRowid: z.boolean().describe('Whether to include ROWID columns.').optional(),
+      withPrimaryKey: z
+        .boolean()
+        .describe('Whether to include PRIMARY KEY columns (recommended).')
+        .optional(),
+      includingNewValues: z
+        .boolean()
+        .describe('Whether to add INCLUDING NEW VALUES (enables fast refresh with DML tracking).')
+        .optional(),
     },
-    async (args) =>
-      withToolContext('create_mview_log', args, () =>
-        guardTool(async () => ({ content: [text(await createMviewLog(ctx, args))] })),
-      ),
+    async (dataAccess, args) => rawResult(await createMviewLog(ctx, args)),
   );
 }

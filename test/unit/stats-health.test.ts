@@ -1,7 +1,7 @@
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { auditStatement } from '../../src/audit/audit-writer.js';
 import { MAX_ROWS, TIMEOUTS } from '../../src/config.js';
 import { FakeDataAccess } from '../../src/db/fake-data-access.js';
@@ -30,8 +30,8 @@ async function callTool(
 function withSessionSchema(data: FakeDataAccess, schema = 'DEVUSER'): FakeDataAccess {
   return data.on(
     ({ sql }) => sql.includes('CURRENT_SCHEMA'),
-    // El alias del SQL va en minúsculas y node-oracledb lo conserva así.
-    () => ({ rows: [{ current_schema: schema }] }),
+    // node-oracledb devuelve el nombre de columna en MAYÚSCULAS, no el alias.
+    () => ({ rows: [{ CURRENT_SCHEMA: schema }] }),
   );
 }
 
@@ -451,12 +451,6 @@ describe('oracle_mcp_health_report', () => {
 
   describe('estado real de la auditoría', () => {
     const tempDirs: string[] = [];
-    afterAll(async () => {
-      // La auditoría del proceso queda configurada con un dir temporal: la
-      // apagamos para no contaminar otras suites del mismo proceso.
-      const { configureAudit } = await import('../../src/audit/audit-writer.js');
-      configureAudit({ enabled: false, dir: './mcp-audit-logs' });
-    });
 
     it('enabled cuando la sesión viva escribe de verdad', async () => {
       const dir = await mkdtemp(join(tmpdir(), 'lu-query-audit-'));
@@ -469,6 +463,7 @@ describe('oracle_mcp_health_report', () => {
       try {
         // Una sentencia real por la API del writer: deja la sesión en disco.
         await auditStatement(
+          harness.audit,
           'SELECT 1 FROM dual',
           () => Promise.resolve({}),
           () => 0,
@@ -498,6 +493,7 @@ describe('oracle_mcp_health_report', () => {
       try {
         // La sentencia se apaga sola por I/O: auditStatement nunca lanza.
         await auditStatement(
+          harness.audit,
           'SELECT 1 FROM dual',
           () => Promise.resolve({}),
           () => 0,

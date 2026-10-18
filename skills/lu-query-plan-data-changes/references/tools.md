@@ -6,7 +6,7 @@
 execute_dml_preview(sql: string)
 -> {"detectedKind":"UPDATE","table":"SKL_EMP","affectedRowCount":3,
     "sampleColumns":["EMP_ID","DEPT_ID","EMAIL","HIRE_DATE","SALARY"],
-    "sampleRows":[… up to 3 …],"sampleCount":3,
+    "sampleRows":[… up to 10 …],"sampleCount":3,
     "note":"Dry-run preview: the statement was NOT executed. …"}
 ```
 

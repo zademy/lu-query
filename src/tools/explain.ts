@@ -1,13 +1,11 @@
 import { z } from 'zod';
-import { withToolContext } from '../audit/context.js';
-import { resolveSchema } from '../catalog/schema.js';
+import { resolveSchemaFor } from '../catalog/schema.js';
 import type { DataAccess } from '../db/data-access.js';
 import type { OracleRow } from '../db/oracle-types.js';
-import { DataAccessError, guardTool } from '../errors.js';
+import { DataAccessError } from '../errors.js';
+import { quoteTrustedIdentifier } from '../security/identifiers.js';
 import type { ServerContext } from '../server.js';
-
-/** Escala de las notificaciones de progreso MCP (10 al empezar, 90 al terminar). */
-const PROGRESS_TOTAL = 100;
+import { jsonResult, progressReporter, rawResult, vTool } from './mcp.js';
 
 /** Límite de identificadores de Oracle 12c+. */
 const MAX_INDEX_NAME = 128;
@@ -258,8 +256,8 @@ function buildSuggestion(candidate: OracleRow, colStats: OracleRow[]): IndexSugg
 function buildCreateIndexDdl(schema: string, table: string, columns: string[]): string {
   const name = truncateIndexName(`IX_${table}_${columns.join('_')}`);
   return (
-    `CREATE INDEX ${quoteTrusted(schema)}.${quoteTrusted(name)}` +
-    ` ON ${quoteTrusted(schema)}.${quoteTrusted(table)} (${columns.map(quoteTrusted).join(', ')})`
+    `CREATE INDEX ${quoteTrustedIdentifier(schema)}.${quoteTrustedIdentifier(name)}` +
+    ` ON ${quoteTrustedIdentifier(schema)}.${quoteTrustedIdentifier(table)} (${columns.map(quoteTrustedIdentifier).join(', ')})`
   );
 }
 
@@ -277,11 +275,6 @@ function javaHash(text: string): number {
     hash = (Math.imul(31, hash) + text.charCodeAt(i)) | 0;
   }
   return hash;
-}
-
-/** Identificador ya confiable: solo se escapan las comillas dobles. */
-function quoteTrusted(name: string): string {
-  return `"${name.replaceAll('"', '""')}"`;
 }
 
 /** Columnas de los predicados de acceso y filtro, deduplicadas sin distinguir mayúsculas. */
@@ -440,131 +433,77 @@ function javaList(values: string[]): string {
   return `[${values.join(', ')}]`;
 }
 
-function json(value: unknown): { type: 'text'; text: string } {
-  return { type: 'text', text: JSON.stringify(value) };
-}
-
-/**
- * Notificador de progreso MCP: solo existe si el cliente pidió token en la
- * petición. Los fallos se tragan: el progreso es informativo, no un resultado.
- */
-function progressReporter(
-  ctx: ServerContext,
-  token: string | number | undefined,
-  requestId: string | number,
-): (progress: number, message: string) => void {
-  if (token === undefined) return () => undefined;
-
-  return (progress, message) => {
-    void ctx.server.server
-      .notification(
-        {
-          method: 'notifications/progress',
-          params: { progressToken: token, progress, total: PROGRESS_TOTAL, message },
-        },
-        { relatedRequestId: requestId },
-      )
-      .catch(() => undefined);
-  };
-}
-
 /** Explain — el plan sin ejecutar el SQL y el asesor de índices. */
 export function registerExplain(ctx: ServerContext): void {
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'explain_plan',
+    'Generate and return the Oracle execution plan for a SQL statement via EXPLAIN PLAN and DBMS_XPLAN, without executing the statement. Needs a PLAN_TABLE; if it is missing or the user lacks access, the failure is surfaced as an error result. Reports progress to clients that pass a progress token.',
     {
-      description:
-        'Generate and return the Oracle execution plan for a SQL statement via EXPLAIN PLAN and DBMS_XPLAN, without executing the statement. Needs a PLAN_TABLE; if it is missing or the user lacks access, the failure is surfaced as an error result. Reports progress to clients that pass a progress token.',
-      inputSchema: {
-        sql: z
-          .string()
-          .describe(
-            'The SQL statement to plan (typically SELECT, INSERT, UPDATE, DELETE or MERGE).',
-          ),
-      },
+      sql: z
+        .string()
+        .describe('The SQL statement to plan (typically SELECT, INSERT, UPDATE, DELETE or MERGE).'),
     },
-    async (args, extra) =>
-      withToolContext('explain_plan', args, () =>
-        guardTool(async () => {
-          const report = progressReporter(ctx, extra._meta?.progressToken, extra.requestId);
-          report(10, `Planning ${args.sql}`);
-          const plan = await explainPlan(ctx.dataAccess, args.sql);
-          report(90, 'Plan ready');
-          return { content: [{ type: 'text', text: plan }] };
-        }),
-      ),
+    async (dataAccess, args, extra) => {
+      const report = progressReporter(ctx, extra._meta?.progressToken, extra.requestId);
+      report(10, `Planning ${args.sql}`);
+      const plan = await explainPlan(ctx.dataAccess, args.sql);
+      report(90, 'Plan ready');
+      return rawResult(plan);
+    },
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'suggest_index',
+    'Analyse a SQL statement via EXPLAIN PLAN and, when a table is read by full scan, propose a CREATE INDEX statement. Returns the recommended DDL as text; it is never executed. Apply it manually only after DBA review.',
     {
-      description:
-        'Analyse a SQL statement via EXPLAIN PLAN and, when a table is read by full scan, propose a CREATE INDEX statement. Returns the recommended DDL as text; it is never executed. Apply it manually only after DBA review.',
-      inputSchema: {
-        sql: z
-          .string()
-          .describe('The SQL statement to analyse (typically SELECT; DML is also supported).'),
-        targetTable: z
-          .string()
-          .describe('Optional table name to focus on when several tables are scanned.')
-          .optional(),
-      },
+      sql: z
+        .string()
+        .describe('The SQL statement to analyse (typically SELECT; DML is also supported).'),
+      targetTable: z
+        .string()
+        .describe('Optional table name to focus on when several tables are scanned.')
+        .optional(),
     },
-    async (args) =>
-      withToolContext('suggest_index', args, () =>
-        guardTool(async () => ({
-          content: [json(await suggestIndex(ctx.dataAccess, args.sql, args.targetTable))],
-        })),
-      ),
+    async (dataAccess, args) =>
+      jsonResult(await suggestIndex(ctx.dataAccess, args.sql, args.targetTable)),
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'list_unused_indexes',
+    "List indexes with their columns and best-effort usage information. The likely_unused flag is YES/NO when index monitoring is enabled, otherwise UNKNOWN. Definitive 'unused' answers require a DBA to run ALTER INDEX ... MONITORING USAGE.",
     {
-      description:
-        "List indexes with their columns and best-effort usage information. The likely_unused flag is YES/NO when index monitoring is enabled, otherwise UNKNOWN. Definitive 'unused' answers require a DBA to run ALTER INDEX ... MONITORING USAGE.",
-      inputSchema: {
-        schema: z
-          .string()
-          .describe(
-            'Schema (table owner). Omit rather than guess: defaults to the schema of the current session.',
-          )
-          .optional(),
-      },
+      schema: z
+        .string()
+        .describe(
+          'Schema (table owner). Omit rather than guess: defaults to the schema of the current session.',
+        )
+        .optional(),
     },
-    async (args) =>
-      withToolContext('list_unused_indexes', args, () =>
-        guardTool(async () => ({
-          content: [
-            json(
-              await listUnusedIndexes(
-                ctx.dataAccess,
-                resolveSchema(args.schema, ctx.config.schema, 'list_unused_indexes'),
-              ),
-            ),
-          ],
-        })),
+    async (dataAccess, args) =>
+      jsonResult(
+        await listUnusedIndexes(
+          ctx.dataAccess,
+          await resolveSchemaFor(ctx, args.schema, 'list_unused_indexes'),
+        ),
       ),
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'run_sql_tuning_advisor',
+    "Run Oracle's SQL Tuning Advisor (DBMS_SQLTUNE) on a statement and return its TEXT report with recommendations (indexes, SQL profiles, statistics, rewrites). Requires the ADVISOR privilege; a missing privilege is surfaced as an error result. Reports progress to clients that pass a progress token.",
     {
-      description:
-        "Run Oracle's SQL Tuning Advisor (DBMS_SQLTUNE) on a statement and return its TEXT report with recommendations (indexes, SQL profiles, statistics, rewrites). Requires the ADVISOR privilege; a missing privilege is surfaced as an error result. Reports progress to clients that pass a progress token.",
-      inputSchema: {
-        sql: z.string().describe('The SQL statement to tune.'),
-      },
+      sql: z.string().describe('The SQL statement to tune.'),
     },
-    async (args, extra) =>
-      withToolContext('run_sql_tuning_advisor', args, () =>
-        guardTool(async () => {
-          const report = progressReporter(ctx, extra._meta?.progressToken, extra.requestId);
-          report(10, 'Running SQL Tuning Advisor');
-          const tuning = await runSqlTuningAdvisor(ctx.dataAccess, args.sql);
-          report(90, 'Tuning report ready');
-          return { content: [{ type: 'text', text: tuning }] };
-        }),
-      ),
+    async (dataAccess, args, extra) => {
+      const report = progressReporter(ctx, extra._meta?.progressToken, extra.requestId);
+      report(10, 'Running SQL Tuning Advisor');
+      const tuning = await runSqlTuningAdvisor(ctx.dataAccess, args.sql);
+      report(90, 'Tuning report ready');
+      return rawResult(tuning);
+    },
   );
 }

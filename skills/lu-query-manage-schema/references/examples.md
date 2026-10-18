@@ -1,6 +1,6 @@
 # Verified examples - DDL
 
-Oracle 26ai Free, lu-query 2.13.0, 2026-10-17, user `DEVUSER`. All calls returned success lines verbatim.
+Oracle 26ai Free, lu-query 2.16.3, 2026-10-18, user `DEVUSER`. All calls returned success lines verbatim.
 
 ```json
 {"tool": "create_sequence", "args": {"sequence": "SKL_SEQ", "startWith": 1000, "incrementBy": 1, "cache": 20}}
@@ -47,12 +47,16 @@ Verification after the fact:
 
 The comment is visible through `describe_table` (`COMMENTS` column) and through `USER_TAB_COMMENTS`.
 
-## Failure observed (expected, useful)
+## Without a schema: the session schema is used
 
-`create_sequence` without a schema (server has no `ORACLE_DB_SCHEMA`):
+`create_sequence` with no `schema` argument and no `ORACLE_DB_SCHEMA` on the server (re-verified 2026-10-18 on 2.16.3):
 
-```text
-create_sequence necesita un schema: pasa el argumento schema o define ORACLE_DB_SCHEMA
+```json
+{ "tool": "create_sequence", "args": { "sequence": "SKL_SEQ2" } }
 ```
 
-Pass `schema` or set the env var once; this is the same up-front check every object-scoped tool performs.
+```text
+Sequence DEVUSER.SKL_SEQ2 created.
+```
+
+The owner comes from the session's `CURRENT_SCHEMA`. Pass `schema` only to create the object in another owner. (Before 2.16.3 this call failed with "create_sequence necesita un schema": the session fallback was broken.)

@@ -1,7 +1,7 @@
 ---
 name: lu-query-plan-data-changes
 description: Use lu-query to change Oracle rows safely - preview the blast radius with execute_dml_preview, rehearse with execute_dml_rollback_first, commit with execute_dml, and pick new keys with find_free_id or get_next_sequence_value. Use for INSERT/UPDATE/DELETE/MERGE where the user approved the change.
-compatibility: Requires the lu-query MCP server connected over stdio. Needs write grants on the target tables; find_free_id and get_next_sequence_value need a schema.
+compatibility: Requires the lu-query MCP server connected over stdio. Needs write grants on the target tables; find_free_id and get_next_sequence_value resolve the owner themselves (schema argument, then ORACLE_DB_SCHEMA, then the session's CURRENT_SCHEMA).
 ---
 
 # Plan and apply data changes with lu-query
@@ -26,7 +26,7 @@ compatibility: Requires the lu-query MCP server connected over stdio. Needs writ
 
 ## Workflow
 
-1. **Preview.** `execute_dml_preview` on the exact statement. It returns `detectedKind`, `affectedRowCount` and up to 3 `sampleRows`. If `affectedRowCount` is not what you expect, stop and re-check the predicate.
+1. **Preview.** `execute_dml_preview` on the exact statement. It counts the affected rows with a mirror SELECT built from your own SQL, so an alias or a subquery in the predicate is honoured. It returns `detectedKind`, `affectedRowCount` and up to 10 `sampleRows`. If `affectedRowCount` is not what you expect, stop and re-check the predicate.
 2. **Rehearse when risky.** `execute_dml_rollback_first` proves the statement passes triggers/FKs/NOT NULL and shows `rowsAffected`, then rolls back. Use it before any bulk UPDATE.
 3. **Obtain keys deliberately.** `find_free_id` returns the lowest unused integer in a range (default 1..1000, hard cap 10000) - it does not reserve it. `get_next_sequence_value` **consumes** the next value (gaps are normal).
 4. **Apply.** `execute_dml` with the same statement text you previewed. It commits through the chokepoint.

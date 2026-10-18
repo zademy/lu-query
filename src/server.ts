@@ -1,9 +1,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { createFileAuditWriter, type AuditWriter } from './audit/audit-writer.js';
 import { registerAuditResource } from './audit/audit-resource.js';
 import { type ResolvedConfig } from './config.js';
 import { createOracleDataAccess, createPoolProvider } from './db/pool.js';
-import type { DataAccess } from './db/data-access.js';
+import { withAudit, type DataAccess } from './db/data-access.js';
 import { registerToolGroups } from './tools/registry.js';
 
 export const SERVER_NAME = 'lu-query';
@@ -21,6 +22,8 @@ function initToolRequestHandlers(server: McpServer): void {
 export interface ServerContext {
   server: McpServer;
   dataAccess: DataAccess;
+  /** Sesión de auditoría viva; la construye `createServer` y la usa el chokepoint. */
+  audit: AuditWriter;
   /** Schema de la sesión, resuelto al arrancar si no hay ORACLE_DB_SCHEMA. */
   sessionSchema?: string;
   config: ResolvedConfig;
@@ -41,10 +44,16 @@ export interface CreateServerDeps {
 
 export function createServer(deps: CreateServerDeps): ServerHandle {
   const { config } = deps;
-  const dataAccess = deps.dataAccess ?? createOracleDataAccess(createPoolProvider(config));
+  // El chokepoint se audita aquí, no dentro del adapter: todo `dataAccess`
+  // inyectado (el pool real o el fake de los tests) pasa por el mismo hook.
+  const audit: AuditWriter = createFileAuditWriter(config.audit);
+  const dataAccess = withAudit(
+    deps.dataAccess ?? createOracleDataAccess(createPoolProvider(config)),
+    audit,
+  );
 
   const server = new McpServer({ name: SERVER_NAME, version: config.serverVersion });
-  const context: ServerContext = { server, dataAccess, config };
+  const context: ServerContext = { server, dataAccess, audit, config };
   registerToolGroups(context);
   registerAuditResource(context);
   initToolRequestHandlers(server);

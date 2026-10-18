@@ -1,6 +1,6 @@
 # Verified examples - data quality
 
-Oracle 26ai Free, lu-query 2.13.0, 2026-10-17. Fixture: `SKL_EMP` holds 5 seeded rows with `EMAIL 'ada@example.com'` twice, one `DEPT_ID=99` (no parent) and one `NULL DEPT_ID`; FK is `ENABLE NOVALIDATE`.
+Oracle 26ai Free, lu-query 2.16.3, 2026-10-18. Fixture: `SKL_EMP` holds 5 seeded rows with `EMAIL 'ada@example.com'` twice, one `DEPT_ID=99` (no parent) and one `NULL DEPT_ID`; FK is `ENABLE NOVALIDATE`.
 
 ## Exact count
 

@@ -1,6 +1,6 @@
 # Verified examples - PL/SQL
 
-Oracle 26ai Free, lu-query 2.13.0, 2026-10-17. Programs: `SKL_ADD_EMP(p_email IN VARCHAR2, p_salary IN NUMBER, p_hire_date IN DATE, o_emp_id OUT NUMBER)` and `SKL_DEPT_EMPS(p_dept_id IN NUMBER) RETURN SYS_REFCURSOR`.
+Oracle 26ai Free, lu-query 2.16.3, 2026-10-18. Programs: `SKL_ADD_EMP(p_email IN VARCHAR2, p_salary IN NUMBER, p_hire_date IN DATE, o_emp_id OUT NUMBER)` and `SKL_DEPT_EMPS(p_dept_id IN NUMBER) RETURN SYS_REFCURSOR`.
 
 ## Inspect a procedure
 

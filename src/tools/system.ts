@@ -1,6 +1,5 @@
-import { withToolContext } from '../audit/context.js';
 import type { DataAccess } from '../db/data-access.js';
-import { asToolError } from '../errors.js';
+import { jsonResult, vTool } from './mcp.js';
 import type { ServerContext } from '../server.js';
 
 /** Identidad de la conexión, con los mismos campos que el record ConnectionInfo del Java. */
@@ -40,22 +39,10 @@ export async function connectionInfo(dataAccess: DataAccess): Promise<Connection
 
 /** System — verifica conectividad e identidad (test_connection). */
 export function registerSystem(ctx: ServerContext): void {
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'test_connection',
-    {
-      description:
-        'Verify connectivity to Oracle and report the database version, name, current user, current schema and instance name. WHEN TO CALL: only when the user explicitly asks to verify the connection or diagnose reachability; do NOT call as a preamble before answering a query about tables, data, or schema objects.',
-    },
-    async () =>
-      // El contexto de auditoría viaja por AsyncLocalStorage hasta el DataAccess.
-      withToolContext('test_connection', {}, async () => {
-        try {
-          const info = await connectionInfo(ctx.dataAccess);
-          return { content: [{ type: 'text' as const, text: JSON.stringify(info) }] };
-        } catch (error) {
-          // Nunca una excepción por el transporte: el Java devuelve isError con el mensaje.
-          return { ...asToolError(error) };
-        }
-      }),
+    'Verify connectivity to Oracle and report the database version, name, current user, current schema and instance name. WHEN TO CALL: only when the user explicitly asks to verify the connection or diagnose reachability; do NOT call as a preamble before answering a query about tables, data, or schema objects.',
+    async (dataAccess) => jsonResult(await connectionInfo(dataAccess)),
   );
 }

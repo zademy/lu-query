@@ -1,6 +1,6 @@
 # Tool reference - DDL
 
-All seven tools require a resolvable schema (argument `schema`, or `ORACLE_DB_SCHEMA` on the server). Verified responses are plain confirmation lines.
+All seven tools resolve the owner themselves: the `schema` argument, then `ORACLE_DB_SCHEMA`, then the session's `CURRENT_SCHEMA`. Verified responses are plain confirmation lines.
 
 ## Comments
 

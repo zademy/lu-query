@@ -6,11 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { listAuditSessions, readAuditSession } from '../../src/audit/audit-reader.js';
-import {
-  configureAudit,
-  createFileAuditWriter,
-  currentAuditSessionId,
-} from '../../src/audit/audit-writer.js';
+import { createFileAuditWriter, type AuditWriter } from '../../src/audit/audit-writer.js';
 import { withToolContext } from '../../src/audit/context.js';
 import { loadConfig } from '../../src/config.js';
 import { FakeDataAccess } from '../../src/db/fake-data-access.js';
@@ -275,18 +271,17 @@ describe('audit reader', () => {
 });
 
 describe('hook de auditoría en el chokepoint DataAccess', () => {
-  function audited(): DataAccess {
-    return withAudit(new FakeDataAccess().always(() => ({ rows: [{ ID: 1 }, { ID: 2 }] })));
+  function audited(audit: AuditWriter = createFileAuditWriter({ enabled: true, dir })): DataAccess {
+    return withAudit(
+      new FakeDataAccess().always(() => ({ rows: [{ ID: 1 }, { ID: 2 }] })),
+      audit,
+    );
   }
 
   async function auditFile(): Promise<string> {
     const [file] = await readdir(dir);
     return readFile(join(dir, file!), 'utf8');
   }
-
-  beforeEach(() => {
-    configureAudit({ enabled: true, dir });
-  });
 
   it('deja una entrada por sentencia con tool, kind, type, filas y SQL verbatim', async () => {
     const rows = await withToolContext(
@@ -305,7 +300,10 @@ describe('hook de auditoría en el chokepoint DataAccess', () => {
   });
 
   it('el DML cuenta las filas afectadas y el call deja la sentencia BEGIN', async () => {
-    const dataAccess = withAudit(new FakeDataAccess().always(() => ({ rowCount: 7 })));
+    const dataAccess = withAudit(
+      new FakeDataAccess().always(() => ({ rowCount: 7 })),
+      createFileAuditWriter({ enabled: true, dir }),
+    );
 
     await withToolContext('execute_dml', { sql: 'UPDATE emp SET sal = 1' }, () =>
       dataAccess.execute('UPDATE emp SET sal = 1'),
@@ -323,7 +321,10 @@ describe('hook de auditoría en el chokepoint DataAccess', () => {
     const error = Object.assign(new Error('ORA-01017: invalid username/password; logon denied'), {
       code: 'ORA-01017',
     });
-    const dataAccess = withAudit(new FakeDataAccess().alwaysFail(error));
+    const dataAccess = withAudit(
+      new FakeDataAccess().alwaysFail(error),
+      createFileAuditWriter({ enabled: true, dir }),
+    );
 
     await expect(
       withToolContext('test_connection', {}, () => dataAccess.queryForObject('SELECT 1 FROM dual')),
@@ -340,12 +341,13 @@ describe('hook de auditoría en el chokepoint DataAccess', () => {
   it('si la auditoría no puede escribir, la respuesta de la tool no se resiente', async () => {
     const blocker = join(dir, 'bloqueado');
     await writeFile(blocker, 'soy un archivo');
-    configureAudit({ enabled: true, dir: join(blocker, 'logs') });
+    const writer = createFileAuditWriter({ enabled: true, dir: join(blocker, 'logs') });
 
     const rows = await withToolContext('run_query', {}, () =>
-      withAudit(new FakeDataAccess().always(() => ({ rows: [{ ID: 1 }] }))).queryForList(
-        'SELECT * FROM emp',
-      ),
+      withAudit(
+        new FakeDataAccess().always(() => ({ rows: [{ ID: 1 }] })),
+        writer,
+      ).queryForList('SELECT * FROM emp'),
     );
 
     expect(rows).toHaveLength(1);
@@ -353,10 +355,10 @@ describe('hook de auditoría en el chokepoint DataAccess', () => {
   });
 
   it('apagar MCP_AUDIT_ENABLED deja el chokepoint intacto y sin escribir', async () => {
-    configureAudit({ enabled: false, dir });
+    const apagada = createFileAuditWriter({ enabled: false, dir });
 
     await expect(
-      withToolContext('run_query', {}, () => audited().queryForList('SELECT 1 FROM dual')),
+      withToolContext('run_query', {}, () => audited(apagada).queryForList('SELECT 1 FROM dual')),
     ).resolves.toHaveLength(2);
 
     expect(await readdir(dir)).toEqual([]);
@@ -368,12 +370,12 @@ describe('recurso MCP de auditoría', () => {
   function textOf(contents: readonly unknown[]): string {
     return String((contents[0] as { text?: string } | undefined)?.text);
   }
-  /** Server MCP con el fake auditado: sin Oracle, pero con el camino de producción. */
+  /** Server MCP con el fake: `createServer` lo envuelve con auditoría, como en producción. */
   async function auditedServer(auditDir: string) {
     const config = { ...loadConfig({}), audit: { enabled: true, dir: auditDir } };
-    const dataAccess = withAudit(
-      new FakeDataAccess().always(() => ({ rows: [{ VERSION: 'Oracle Database 19c' }] })),
-    );
+    const dataAccess = new FakeDataAccess().always(() => ({
+      rows: [{ VERSION: 'Oracle Database 19c' }],
+    }));
     const handle = createServer({ config, dataAccess });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'lu-query-audit-test', version: '0.0.0' });
@@ -381,6 +383,7 @@ describe('recurso MCP de auditoría', () => {
 
     return {
       client,
+      sessionId: handle.context.audit.sessionId(),
       close: async () => {
         await client.close();
         await handle.close();
@@ -394,7 +397,7 @@ describe('recurso MCP de auditoría', () => {
     try {
       await oracle.client.callTool({ name: 'test_connection', arguments: {} });
 
-      const sessionId = currentAuditSessionId();
+      const sessionId = oracle.sessionId;
       const { contents } = await oracle.client.readResource({
         uri: `oracle://audit/session/${sessionId}`,
       });
@@ -416,7 +419,7 @@ describe('recurso MCP de auditoría', () => {
 
     try {
       await oracle.client.callTool({ name: 'test_connection', arguments: {} });
-      const sessionId = currentAuditSessionId();
+      const sessionId = oracle.sessionId;
 
       const current = await oracle.client.readResource({ uri: 'oracle://audit/session/current' });
       expect(textOf(current.contents)).toContain(`| session-id     | ${sessionId} |`);

@@ -1,3 +1,4 @@
+import { MAX_ROWS } from '../config.js';
 import type { DataAccess, DataAccessCall, QueryOptions } from './data-access.js';
 import type { OracleBind, OracleCallBind, OracleRow } from './oracle-types.js';
 
@@ -66,7 +67,11 @@ export class FakeDataAccess implements DataAccess {
   }
 
   queryForList(sql: string, binds?: OracleBind[], options?: QueryOptions): Promise<OracleRow[]> {
-    return this.answer('queryForList', sql, binds, options).then((reply) => reply.rows ?? []);
+    // El tope es parte de la interfaz: sin él el fake mentiría frente al
+    // chokepoint, que siempre manda MAX_ROWS cuando la tool no lo fija.
+    return this.answer('queryForList', sql, binds, options).then((reply) =>
+      (reply.rows ?? []).slice(0, options?.maxRows ?? MAX_ROWS),
+    );
   }
 
   async queryForObject(

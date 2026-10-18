@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import { withToolContext } from '../audit/context.js';
+
 import type { DataAccess } from '../db/data-access.js';
 import type { OracleRow } from '../db/oracle-types.js';
-import { guardTool, SecurityError } from '../errors.js';
+import { SecurityError } from '../errors.js';
+import { jsonResult, vTool } from './mcp.js';
 import type { ServerContext } from '../server.js';
 import { buildCappedSelect } from '../sql/capped-select.js';
 import { classifyDml, parseDmlTarget, type DmlKind } from '../sql/dml-parser.js';
@@ -41,7 +42,7 @@ export interface DmlDryRunResult {
  * con un SELECT, así que se rechazan.
  */
 async function previewDml(dataAccess: DataAccess, sql: string): Promise<DmlPreviewResult> {
-  const { kind, where } = classifyDml(sql);
+  const { kind, where, alias } = classifyDml(sql);
   if (kind !== 'UPDATE' && kind !== 'DELETE') {
     throw new SecurityError(
       `execute_dml_preview solo admite UPDATE o DELETE (recibido: ${kind}); para INSERT o MERGE usa execute_dml_rollback_first`,
@@ -55,7 +56,10 @@ async function previewDml(dataAccess: DataAccess, sql: string): Promise<DmlPrevi
     );
   }
 
-  const from = `FROM ${target.table}${where === null ? '' : ` WHERE ${where}`}`;
+  // El alias va con la tabla: si el WHERE lo menciona, el SELECT espejo lo necesita.
+  const from =
+    `FROM ${target.table}${alias === null ? '' : ` ${alias}`}` +
+    `${where === null ? '' : ` WHERE ${where}`}`;
   const countRow = await dataAccess.queryForObject(`SELECT COUNT(*) ${from}`);
   // Oracle rotula la columna como COUNT(*); el valor es lo único que importa.
   const affectedRowCount = Number(Object.values(countRow ?? {})[0] ?? 0);
@@ -102,48 +106,34 @@ async function rollbackFirstDml(ctx: ServerContext, sql: string): Promise<DmlDry
     note: 'Statement executed and rolled back; nothing was persisted. Call execute_dml to apply the change.',
   };
 }
-
-function json(value: unknown): { type: 'text'; text: string } {
-  return { type: 'text', text: JSON.stringify(value) };
-}
-
 /** Dml — las tres modalidades de escritura del DmlService del Java. */
 export function registerDml(ctx: ServerContext): void {
-  /** Las tres tools comparten un único parámetro `sql` y el mismo envoltorio. */
-  const register = (
-    name: string,
-    description: string,
-    sqlParam: string,
-    run: (ctx: ServerContext, sql: string) => Promise<unknown>,
-  ) => {
-    ctx.server.registerTool(
-      name,
-      { description, inputSchema: { sql: z.string().describe(sqlParam) } },
-      async (args) =>
-        // El contexto de auditoría viaja por AsyncLocalStorage; guardTool evita
-        // que una excepción de Oracle rompa el transporte.
-        withToolContext(name, args, () =>
-          guardTool(async () => ({ content: [json(await run(ctx, args.sql))] })),
-        ),
-    );
-  };
-
-  register(
+  // Las tres tools comparten un único parámetro \`sql\` y el mismo envoltorio.
+  vTool(
+    ctx,
     'execute_dml',
     'Execute a single INSERT, UPDATE, DELETE or MERGE statement on existing tables and auto-commit it (no explicit COMMIT needed; there is no cross-call transaction boundary). One statement per call. Returns the number of rows affected; if the Oracle user lacks the required privileges the failure surfaces as an error result (isError=true).',
-    'A single INSERT, UPDATE, DELETE or MERGE statement.',
-    (context, sql) => executeDml(context, sql),
+    { sql: z.string().describe('A single INSERT, UPDATE, DELETE or MERGE statement.') },
+    async (_dataAccess, args) => jsonResult(await executeDml(ctx, args.sql)),
   );
-  register(
+  vTool(
+    ctx,
     'execute_dml_preview',
     'Dry-run an UPDATE or DELETE without executing it. Returns the total number of rows that would be affected plus a sample of those rows. INSERT and MERGE are not supported; use execute_dml_rollback_first for those.',
-    'A single UPDATE or DELETE statement to preview (not execute).',
-    (context, sql) => previewDml(context.dataAccess, sql),
+    { sql: z.string().describe('A single UPDATE or DELETE statement to preview (not execute).') },
+    async (_dataAccess, args) => jsonResult(await previewDml(ctx.dataAccess, args.sql)),
   );
-  register(
+  vTool(
+    ctx,
     'execute_dml_rollback_first',
     'Execute an INSERT, UPDATE, DELETE or MERGE inside a transaction that is immediately rolled back. Nothing is persisted; the tool only proves the statement is valid and reports the number of rows affected. Call execute_dml afterwards to apply the change for real.',
-    'A single INSERT, UPDATE, DELETE or MERGE statement to dry-run (executed then rolled back).',
-    (context, sql) => rollbackFirstDml(context, sql),
+    {
+      sql: z
+        .string()
+        .describe(
+          'A single INSERT, UPDATE, DELETE or MERGE statement to dry-run (executed then rolled back).',
+        ),
+    },
+    async (_dataAccess, args) => jsonResult(await rollbackFirstDml(ctx, args.sql)),
   );
 }

@@ -1,4 +1,4 @@
-import { auditStatement, drainAudit } from '../audit/audit-writer.js';
+import { auditStatement, type AuditWriter } from '../audit/audit-writer.js';
 import type { OracleBind, OracleCallBind, OracleRow } from './oracle-types.js';
 
 /** Opciones comunes de una sentencia. */
@@ -47,10 +47,11 @@ export interface DataAccess {
  * equivalente del `SqlAuditAspect` del Java; el tool en curso llega por
  * AsyncLocalStorage, no por parámetro.
  */
-export function withAudit(inner: DataAccess): DataAccess {
+export function withAudit(inner: DataAccess, audit: AuditWriter): DataAccess {
   return {
     queryForList(sql, binds, options) {
       return auditStatement(
+        audit,
         sql,
         () => inner.queryForList(sql, binds, options),
         (rows) => rows.length,
@@ -58,6 +59,7 @@ export function withAudit(inner: DataAccess): DataAccess {
     },
     queryForObject(sql, binds, options) {
       return auditStatement(
+        audit,
         sql,
         () => inner.queryForObject(sql, binds, options),
         (row) => (row === null ? 0 : 1),
@@ -65,6 +67,7 @@ export function withAudit(inner: DataAccess): DataAccess {
     },
     execute(sql, binds, options) {
       return auditStatement(
+        audit,
         sql,
         () => inner.execute(sql, binds, options),
         (rowsAffected) => rowsAffected,
@@ -72,6 +75,7 @@ export function withAudit(inner: DataAccess): DataAccess {
     },
     executeInTransaction(sql, outcome) {
       return auditStatement(
+        audit,
         sql,
         () => inner.executeInTransaction(sql, outcome),
         (rowsAffected) => rowsAffected,
@@ -79,13 +83,14 @@ export function withAudit(inner: DataAccess): DataAccess {
     },
     call(callString, binds) {
       return auditStatement(
+        audit,
         `BEGIN ${callString}; END;`,
         () => inner.call(callString, binds),
         (row) => Object.keys(row).length,
       );
     },
     async close() {
-      await drainAudit(); // flush de las entradas pendientes antes de soltar el pool
+      await audit.drain(); // flush de las entradas pendientes antes de soltar el pool
       await inner.close();
     },
   };

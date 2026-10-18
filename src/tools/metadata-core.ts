@@ -1,25 +1,13 @@
+import { likePattern, ownerBinds } from '../sql/text.js';
 import { Readable } from 'node:stream';
 import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withToolContext } from '../audit/context.js';
 import { resolveSchemaFor } from '../catalog/schema.js';
 import type { DataAccess } from '../db/data-access.js';
-import type { OracleBind, OracleRow } from '../db/oracle-types.js';
-import { guardTool } from '../errors.js';
+import type { OracleRow } from '../db/oracle-types.js';
 import { assertIdentifier } from '../security/identifiers.js';
 import type { ServerContext } from '../server.js';
-
-/** Substring del cliente → patrón LIKE de Oracle (`LikePatterns` del Java). */
-function likePattern(namePattern: string | undefined): string {
-  if (namePattern === undefined || namePattern.trim() === '') return '%';
-  if (namePattern.includes('%') || namePattern.includes('_')) return namePattern.toUpperCase();
-  return `%${namePattern.toUpperCase()}%`;
-}
-
-/** Filtro opcional de owner: sin schema, el predicado `IS NULL` matchea todo. */
-function ownerBinds(schema: string | undefined): OracleBind[] {
-  return [schema ?? null, schema ?? null];
-}
+import { jsonResult, plainResource, vTool } from './mcp.js';
 
 /** Valor del diccionario a texto (null/undefined → cadena vacía). */
 function asText(value: unknown): string {
@@ -238,13 +226,6 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function plain(
-  uri: string,
-  text: string,
-): { contents: { uri: string; mimeType: string; text: string }[] } {
-  return { contents: [{ uri, mimeType: 'text/plain', text }] };
-}
-
 const TABLE_URI = 'oracle://schema/{schema}/table/{table}';
 const DDL_URI = 'oracle://schema/{schema}/object/{object}/ddl';
 
@@ -257,241 +238,199 @@ const DDL_URI = 'oracle://schema/{schema}/object/{object}/ddl';
 export function registerMetadataCore(ctx: ServerContext): void {
   const { dataAccess } = ctx;
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'list_schemas',
-    {
-      description: 'List all Oracle schemas (users) visible to the current connection.',
-    },
-    async () =>
-      // El contexto de auditoría viaja por AsyncLocalStorage hasta el DataAccess.
-      withToolContext('list_schemas', {}, () =>
-        guardTool(async () => ({
-          content: [{ type: 'text' as const, text: JSON.stringify(await listSchemas(dataAccess)) }],
-        })),
-      ),
+    'List all Oracle schemas (users) visible to the current connection.',
+    async (dataAccess, _args) => jsonResult(await listSchemas(dataAccess)),
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'list_tables',
+    "List tables. Supports an optional schema and a case-insensitive LIKE name pattern (use '%' and '_' wildcards; defaults to '%').",
     {
-      description:
-        "List tables. Supports an optional schema and a case-insensitive LIKE name pattern (use '%' and '_' wildcards; defaults to '%').",
-      inputSchema: {
-        schema: z.string().describe('Schema (owner) name. Omit to search all schemas.').optional(),
-        namePattern: z
-          .string()
-          .describe("LIKE pattern for the table name, e.g. 'EMP%' or '%EMP%'. Defaults to '%'.")
-          .optional(),
-      },
+      schema: z.string().describe('Schema (owner) name. Omit to search all schemas.').optional(),
+      namePattern: z
+        .string()
+        .describe("LIKE pattern for the table name, e.g. 'EMP%' or '%EMP%'. Defaults to '%'.")
+        .optional(),
     },
-    async (args) =>
-      withToolContext('list_tables', args, () =>
-        guardTool(async () => ({
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify(await listTables(dataAccess, args.schema, args.namePattern)),
-            },
-          ],
-        })),
-      ),
+    async (dataAccess, args) => ({
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(await listTables(dataAccess, args.schema, args.namePattern)),
+        },
+      ],
+    }),
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'list_views',
+    "List views. Optional schema and case-insensitive LIKE name pattern (defaults to '%').",
     {
-      description:
-        "List views. Optional schema and case-insensitive LIKE name pattern (defaults to '%').",
-      inputSchema: {
-        schema: z.string().describe('Schema (owner) name. Omit to search all schemas.').optional(),
-        namePattern: z
-          .string()
-          .describe("LIKE pattern for the view name. Defaults to '%'.")
-          .optional(),
-      },
+      schema: z.string().describe('Schema (owner) name. Omit to search all schemas.').optional(),
+      namePattern: z
+        .string()
+        .describe("LIKE pattern for the view name. Defaults to '%'.")
+        .optional(),
     },
-    async (args) =>
-      withToolContext('list_views', args, () =>
-        guardTool(async () => ({
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify(await listViews(dataAccess, args.schema, args.namePattern)),
-            },
-          ],
-        })),
-      ),
+    async (dataAccess, args) => ({
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(await listViews(dataAccess, args.schema, args.namePattern)),
+        },
+      ],
+    }),
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'describe_table',
+    'Describe the columns of a table: name, data type, nullability, default value and comment. ALWAYS call this before writing a SELECT/INSERT/UPDATE against an unverified table, so column names and types are known rather than invented.',
     {
-      description:
-        'Describe the columns of a table: name, data type, nullability, default value and comment. ALWAYS call this before writing a SELECT/INSERT/UPDATE against an unverified table, so column names and types are known rather than invented.',
-      inputSchema: {
-        schema: z
-          .string()
-          .describe(
-            "Schema (owner) of the table. Optional — defaults to the server's current schema; omit rather than guess.",
-          )
-          .optional(),
-        table: z.string().describe('Table name.'),
-      },
+      schema: z
+        .string()
+        .describe(
+          "Schema (owner) of the table. Optional — defaults to the server's current schema; omit rather than guess.",
+        )
+        .optional(),
+      table: z.string().describe('Table name.'),
     },
-    async (args) =>
-      withToolContext('describe_table', args, () =>
-        guardTool(async () => ({
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify(
-                await describeTable(
-                  dataAccess,
-                  await resolveSchemaFor(ctx, args.schema, 'describe_table'),
-                  assertIdentifier(args.table, 'tabla'),
-                ),
-              ),
-            },
-          ],
-        })),
-      ),
-  );
-
-  ctx.server.registerTool(
-    'table_exists',
-    {
-      description:
-        'Return true if a table exists (checked via ALL_TABLES; views are NOT considered). Use this instead of run_query {SELECT 1 FROM ALL_TABLES WHERE ...}.',
-      inputSchema: {
-        schema: z
-          .string()
-          .describe(
-            "Schema (owner) of the table. Optional — defaults to the server's current schema; omit rather than guess.",
-          )
-          .optional(),
-        table: z.string().describe('Table name.'),
-      },
-    },
-    async (args) =>
-      withToolContext('table_exists', args, () =>
-        guardTool(async () => ({
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify(
-                await tableExists(
-                  dataAccess,
-                  await resolveSchemaFor(ctx, args.schema, 'table_exists'),
-                  assertIdentifier(args.table, 'tabla'),
-                ),
-              ),
-            },
-          ],
-        })),
-      ),
-  );
-
-  ctx.server.registerTool(
-    'search_objects',
-    {
-      description:
-        'Search database objects by a case-insensitive LIKE name pattern, optionally filtered by object type.',
-      inputSchema: {
-        namePattern: z
-          .string()
-          .describe("LIKE pattern for the object name, e.g. 'EMP%' or '%ORDER%'."),
-        type: z.string().describe("Optional object type filter, e.g. 'TABLE', 'VIEW'.").optional(),
-      },
-    },
-    async (args) =>
-      withToolContext('search_objects', args, () =>
-        guardTool(async () => ({
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify(
-                await searchObjects(
-                  dataAccess,
-                  args.namePattern,
-                  args.type === undefined ? undefined : assertIdentifier(args.type, 'tipo'),
-                ),
-              ),
-            },
-          ],
-        })),
-      ),
-  );
-
-  ctx.server.registerTool(
-    'list_objects',
-    {
-      description:
-        'List database objects (tables, views, packages, procedures, functions, ...). Optional schema and object type filter.',
-      inputSchema: {
-        schema: z.string().describe('Schema (owner) name. Omit to search all schemas.').optional(),
-        type: z
-          .string()
-          .describe("Object type filter, e.g. 'PROCEDURE', 'FUNCTION', 'PACKAGE', 'VIEW'.")
-          .optional(),
-      },
-    },
-    async (args) =>
-      withToolContext('list_objects', args, () =>
-        guardTool(async () => ({
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify(
-                await listObjects(
-                  dataAccess,
-                  args.schema,
-                  args.type === undefined ? undefined : assertIdentifier(args.type, 'tipo'),
-                ),
-              ),
-            },
-          ],
-        })),
-      ),
-  );
-
-  ctx.server.registerTool(
-    'get_ddl',
-    {
-      description:
-        'Return the DDL definition of an object as a CLOB string, using DBMS_METADATA.GET_DDL. Read-only: never executes the DDL. All three parameters (schema, name, type) are REQUIRED. Valid type values: TABLE, VIEW, INDEX, SEQUENCE, PROCEDURE, FUNCTION, PACKAGE, PACKAGE BODY, TRIGGER, TYPE, SYNONYM, DB LINK. schema/name/type are matched case-insensitively against ALL_OBJECTS (lowercase is fine) and the exact stored object is passed to GET_DDL, so a case mismatch never surfaces as ORA-31603. Requires SELECT_CATALOG_ROLE plus EXECUTE on SYS.DBMS_METADATA (granted in db/setup_least_privilege_user.sql); privilege or not-found failures surface as error results.',
-      inputSchema: {
-        schema: z
-          .string()
-          .describe(
-            "Schema (owner) of the object. Optional — defaults to the server's current schema; omit rather than guess.",
-          )
-          .optional(),
-        name: z.string().describe('Object name.'),
-        type: z
-          .string()
-          .describe(
-            "Object type, e.g. 'TABLE', 'VIEW', 'INDEX', 'PROCEDURE', 'FUNCTION', 'PACKAGE', 'SEQUENCE', 'TRIGGER'.",
+    async (dataAccess, args) => ({
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(
+            await describeTable(
+              dataAccess,
+              await resolveSchemaFor(ctx, args.schema, 'describe_table'),
+              assertIdentifier(args.table, 'tabla'),
+            ),
           ),
-      },
+        },
+      ],
+    }),
+  );
+
+  vTool(
+    ctx,
+    'table_exists',
+    'Return true if a table exists (checked via ALL_TABLES; views are NOT considered). Use this instead of run_query {SELECT 1 FROM ALL_TABLES WHERE ...}.',
+    {
+      schema: z
+        .string()
+        .describe(
+          "Schema (owner) of the table. Optional — defaults to the server's current schema; omit rather than guess.",
+        )
+        .optional(),
+      table: z.string().describe('Table name.'),
     },
-    async (args) =>
-      withToolContext('get_ddl', args, () =>
-        guardTool(async () => ({
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify(
-                await getDdl(
-                  dataAccess,
-                  await resolveSchemaFor(ctx, args.schema, 'get_ddl'),
-                  assertIdentifier(args.name, 'nombre'),
-                  assertIdentifier(args.type, 'tipo'),
-                ),
-              ),
-            },
-          ],
-        })),
-      ),
+    async (dataAccess, args) => ({
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(
+            await tableExists(
+              dataAccess,
+              await resolveSchemaFor(ctx, args.schema, 'table_exists'),
+              assertIdentifier(args.table, 'tabla'),
+            ),
+          ),
+        },
+      ],
+    }),
+  );
+
+  vTool(
+    ctx,
+    'search_objects',
+    'Search database objects by a case-insensitive LIKE name pattern, optionally filtered by object type.',
+    {
+      namePattern: z
+        .string()
+        .describe("LIKE pattern for the object name, e.g. 'EMP%' or '%ORDER%'."),
+      type: z.string().describe("Optional object type filter, e.g. 'TABLE', 'VIEW'.").optional(),
+    },
+    async (dataAccess, args) => ({
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(
+            await searchObjects(
+              dataAccess,
+              args.namePattern,
+              args.type === undefined ? undefined : assertIdentifier(args.type, 'tipo'),
+            ),
+          ),
+        },
+      ],
+    }),
+  );
+
+  vTool(
+    ctx,
+    'list_objects',
+    'List database objects (tables, views, packages, procedures, functions, ...). Optional schema and object type filter.',
+    {
+      schema: z.string().describe('Schema (owner) name. Omit to search all schemas.').optional(),
+      type: z
+        .string()
+        .describe("Object type filter, e.g. 'PROCEDURE', 'FUNCTION', 'PACKAGE', 'VIEW'.")
+        .optional(),
+    },
+    async (dataAccess, args) => ({
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(
+            await listObjects(
+              dataAccess,
+              args.schema,
+              args.type === undefined ? undefined : assertIdentifier(args.type, 'tipo'),
+            ),
+          ),
+        },
+      ],
+    }),
+  );
+
+  vTool(
+    ctx,
+    'get_ddl',
+    'Return the DDL definition of an object as a CLOB string, using DBMS_METADATA.GET_DDL. Read-only: never executes the DDL. All three parameters (schema, name, type) are REQUIRED. Valid type values: TABLE, VIEW, INDEX, SEQUENCE, PROCEDURE, FUNCTION, PACKAGE, PACKAGE BODY, TRIGGER, TYPE, SYNONYM, DB LINK. schema/name/type are matched case-insensitively against ALL_OBJECTS (lowercase is fine) and the exact stored object is passed to GET_DDL, so a case mismatch never surfaces as ORA-31603. Requires SELECT_CATALOG_ROLE plus EXECUTE on SYS.DBMS_METADATA (granted in db/setup_least_privilege_user.sql); privilege or not-found failures surface as error results.',
+    {
+      schema: z
+        .string()
+        .describe(
+          "Schema (owner) of the object. Optional — defaults to the server's current schema; omit rather than guess.",
+        )
+        .optional(),
+      name: z.string().describe('Object name.'),
+      type: z
+        .string()
+        .describe(
+          "Object type, e.g. 'TABLE', 'VIEW', 'INDEX', 'PROCEDURE', 'FUNCTION', 'PACKAGE', 'SEQUENCE', 'TRIGGER'.",
+        ),
+    },
+    async (dataAccess, args) => ({
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(
+            await getDdl(
+              dataAccess,
+              await resolveSchemaFor(ctx, args.schema, 'get_ddl'),
+              assertIdentifier(args.name, 'nombre'),
+              assertIdentifier(args.type, 'tipo'),
+            ),
+          ),
+        },
+      ],
+    }),
   );
 
   ctx.server.registerResource(
@@ -510,7 +449,7 @@ export function registerMetadataCore(ctx: ServerContext): void {
       try {
         const columns = await describeTable(dataAccess, schema, table);
         if (columns.length === 0) {
-          return plain(
+          return plainResource(
             uri.href,
             `(No columns found for ${schema}.${table} — the object may not exist or is not accessible.)`,
           );
@@ -524,7 +463,7 @@ export function registerMetadataCore(ctx: ServerContext): void {
             cell(column, 'COMMENTS'),
           ),
         );
-        return plain(
+        return plainResource(
           uri.href,
           [
             `Table: ${schema}.${table}`,
@@ -536,7 +475,10 @@ export function registerMetadataCore(ctx: ServerContext): void {
           ].join('\n'),
         );
       } catch (error) {
-        return plain(uri.href, `(Database error describing ${schema}.${table}: ${message(error)})`);
+        return plainResource(
+          uri.href,
+          `(Database error describing ${schema}.${table}: ${message(error)})`,
+        );
       }
     },
   );
@@ -555,12 +497,12 @@ export function registerMetadataCore(ctx: ServerContext): void {
       const object = assertIdentifier(String(variables.object), 'objeto');
       try {
         const ddl = await getDdlAuto(dataAccess, schema, object);
-        return plain(
+        return plainResource(
           uri.href,
           ddl === null ? `(Object not found: ${schema}.${object})` : ddl.trim(),
         );
       } catch (error) {
-        return plain(
+        return plainResource(
           uri.href,
           `(Database error extracting DDL for ${schema}.${object}: ${message(error)})`,
         );

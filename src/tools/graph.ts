@@ -1,11 +1,10 @@
 import { z } from 'zod';
-import { withToolContext } from '../audit/context.js';
 import { resolveSchemaFor } from '../catalog/schema.js';
 import type { DataAccess } from '../db/data-access.js';
 import type { OracleBind, OracleRow } from '../db/oracle-types.js';
-import { guardTool } from '../errors.js';
 import { assertIdentifier, qualifiedName, quoteIdentifier } from '../security/identifiers.js';
 import type { ServerContext } from '../server.js';
+import { jsonResult, vTool } from './mcp.js';
 
 /** Una relación dirigida del grafo (`GraphEdge` del Java). */
 export interface GraphEdge {
@@ -262,107 +261,96 @@ async function validateFkIntegrity(
 }
 
 export function registerGraph(ctx: ServerContext): void {
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'find_free_id',
+    'Find a free id for a new row: scans 1..maxRange (default 1000, capped at 10000) and returns the lowest value not already used, so a key can be inserted without a sequence.',
     {
-      description:
-        'Find a free id for a new row: scans 1..maxRange (default 1000, capped at 10000) and returns the lowest value not already used, so a key can be inserted without a sequence.',
-      inputSchema: {
-        schema: z
-          .string()
-          .describe(
-            "Schema (owner) of the table. Optional — defaults to the server's current schema; omit rather than guess.",
-          )
-          .optional(),
-        table: z.string().describe('Table name.'),
-        column: z.string().describe('Numeric id column to search for a free value.'),
-        maxRange: z
-          .number()
-          .int()
-          .min(1)
-          .describe(
-            'Inclusive upper bound of the search window. Defaults to 1000; capped at 10000.',
-          )
-          .optional(),
-        excludeTable: z
-          .string()
-          .describe(
-            'Optional second table (same schema, same column) whose ids must also be avoided.',
-          )
-          .optional(),
-      },
+      schema: z
+        .string()
+        .describe(
+          "Schema (owner) of the table. Optional — defaults to the server's current schema; omit rather than guess.",
+        )
+        .optional(),
+      table: z.string().describe('Table name.'),
+      column: z.string().describe('Numeric id column to search for a free value.'),
+      maxRange: z
+        .number()
+        .int()
+        .min(1)
+        .describe('Inclusive upper bound of the search window. Defaults to 1000; capped at 10000.')
+        .optional(),
+      excludeTable: z
+        .string()
+        .describe(
+          'Optional second table (same schema, same column) whose ids must also be avoided.',
+        )
+        .optional(),
     },
-    async (args) =>
-      withToolContext('find_free_id', args, () =>
-        guardTool(async () => {
-          const owner = await resolveSchemaFor(ctx, args.schema, 'find_free_id');
-          const table = assertIdentifier(args.table, 'table');
-          const column = assertIdentifier(args.column, 'columna');
-          const maxRange = Math.min(args.maxRange ?? 1000, 10_000);
-          const exclude = args.excludeTable?.trim()
-            ? assertIdentifier(args.excludeTable, 'excludeTable')
-            : null;
-          const used = exclude
-            ? `SELECT "${column}" FROM ${qualifiedName(owner, table)}
+    async (dataAccess, args) => {
+      const owner = await resolveSchemaFor(ctx, args.schema, 'find_free_id');
+      const table = assertIdentifier(args.table, 'table');
+      const column = assertIdentifier(args.column, 'columna');
+      const maxRange = Math.min(args.maxRange ?? 1000, 10_000);
+      const exclude = args.excludeTable?.trim()
+        ? assertIdentifier(args.excludeTable, 'excludeTable')
+        : null;
+      const used = exclude
+        ? `SELECT "${column}" FROM ${qualifiedName(owner, table)}
 UNION SELECT "${column}" FROM ${qualifiedName(owner, exclude)}`
-            : `SELECT "${column}" FROM ${qualifiedName(owner, table)}`;
-          const row = await ctx.dataAccess.queryForObject(
-            // `SELECT i FROM dual` no lee la pseudocolumna: hay que nombrar LEVEL.
-            `WITH candidate AS (SELECT LEVEL AS i FROM dual CONNECT BY LEVEL <= :max_range),
+        : `SELECT "${column}" FROM ${qualifiedName(owner, table)}`;
+      const row = await ctx.dataAccess.queryForObject(
+        // `SELECT i FROM dual` no lee la pseudocolumna: hay que nombrar LEVEL.
+        `WITH candidate AS (SELECT LEVEL AS i FROM dual CONNECT BY LEVEL <= :max_range),
 used AS (${used})
 SELECT MIN(c.i) AS candidate_id
 FROM candidate c
 WHERE NOT EXISTS (SELECT 1 FROM used u WHERE u."${column}" = c.i)`,
-            [maxRange],
-          );
-          const result = {
-            schema: owner,
-            table,
-            column,
-            maxRange,
-            excludeTable: exclude,
-            candidateId:
-              row?.CANDIDATE_ID === null || row?.CANDIDATE_ID === undefined
-                ? null
-                : Number(row.CANDIDATE_ID),
-          };
-          return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
-        }),
-      ),
+        [maxRange],
+      );
+      const result = {
+        schema: owner,
+        table,
+        column,
+        maxRange,
+        excludeTable: exclude,
+        candidateId:
+          row?.CANDIDATE_ID === null || row?.CANDIDATE_ID === undefined
+            ? null
+            : Number(row.CANDIDATE_ID),
+      };
+      return jsonResult(result);
+    },
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'find_duplicates',
+    'Find duplicate value groups in one or more columns of a table (excluding NULLs). Groups at or above minCount (default 2) come back with a COUNT and a sample ROWID.',
     {
-      description:
-        'Find duplicate value groups in one or more columns of a table (excluding NULLs). Groups at or above minCount (default 2) come back with a COUNT and a sample ROWID.',
-      inputSchema: {
-        schema: z
-          .string()
-          .describe(
-            "Schema (owner) of the table. Optional — defaults to the server's current schema; omit rather than guess.",
-          )
-          .optional(),
-        table: z.string().describe('Table name.'),
-        columns: z.array(z.string()).min(1).describe('Columns to compare together.'),
-        minCount: z
-          .number()
-          .int()
-          .min(1)
-          .describe('Minimum occurrences of a group. Defaults to 2.')
-          .optional(),
-      },
+      schema: z
+        .string()
+        .describe(
+          "Schema (owner) of the table. Optional — defaults to the server's current schema; omit rather than guess.",
+        )
+        .optional(),
+      table: z.string().describe('Table name.'),
+      columns: z.array(z.string()).min(1).describe('Columns to compare together.'),
+      minCount: z
+        .number()
+        .int()
+        .min(1)
+        .describe('Minimum occurrences of a group. Defaults to 2.')
+        .optional(),
     },
-    async (args) =>
-      withToolContext('find_duplicates', args, () =>
-        guardTool(async () => {
-          const owner = await resolveSchemaFor(ctx, args.schema, 'find_duplicates');
-          const table = assertIdentifier(args.table, 'table');
-          const cols = args.columns.map((column) => quoteIdentifier(column, 'columna'));
-          const minCount = args.minCount ?? 2;
-          const notNull = cols.map((column) => `${column} IS NOT NULL`).join(' AND ');
-          const rows = await ctx.dataAccess.queryForList(
-            `SELECT ${cols.join(', ')},
+    async (dataAccess, args) => {
+      const owner = await resolveSchemaFor(ctx, args.schema, 'find_duplicates');
+      const table = assertIdentifier(args.table, 'table');
+      const cols = args.columns.map((column) => quoteIdentifier(column, 'columna'));
+      const minCount = args.minCount ?? 2;
+      const notNull = cols.map((column) => `${column} IS NOT NULL`).join(' AND ');
+      const rows = await ctx.dataAccess.queryForList(
+        `SELECT ${cols.join(', ')},
        COUNT(*) AS cnt,
        MIN(ROWIDTOCHAR(ROWID)) AS sample_rowid
 FROM ${qualifiedName(owner, table)}
@@ -370,172 +358,146 @@ WHERE ${notNull}
 GROUP BY ${cols.join(', ')}
 HAVING COUNT(*) >= :minCount
 ORDER BY COUNT(*) DESC`,
-            [minCount],
-          );
-          const result = { schema: owner, table, columns: args.columns, minCount, groups: rows };
-          return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
-        }),
-      ),
+        [minCount],
+      );
+      const result = { schema: owner, table, columns: args.columns, minCount, groups: rows };
+      return jsonResult(result);
+    },
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'count_rows',
+    'Count rows in a table without running SQL. Useful to size a table before indexing, partitioning or sampling.',
     {
-      description:
-        'Count rows in a table without running SQL. Useful to size a table before indexing, partitioning or sampling.',
-      inputSchema: {
-        schema: z
-          .string()
-          .describe(
-            "Schema (owner) of the table. Optional — defaults to the server's current schema; omit rather than guess.",
-          )
-          .optional(),
-        table: z.string().describe('Table name.'),
-      },
+      schema: z
+        .string()
+        .describe(
+          "Schema (owner) of the table. Optional — defaults to the server's current schema; omit rather than guess.",
+        )
+        .optional(),
+      table: z.string().describe('Table name.'),
     },
-    async (args) =>
-      withToolContext('count_rows', args, () =>
-        guardTool(async () => {
-          const owner = await resolveSchemaFor(ctx, args.schema, 'count_rows');
-          const table = assertIdentifier(args.table, 'table');
-          const row = await ctx.dataAccess.queryForObject(
-            `SELECT COUNT(*) AS cnt FROM ${qualifiedName(owner, table)}`,
-          );
-          const result = {
-            schema: owner,
-            table,
-            rowCount: row?.CNT === null || row?.CNT === undefined ? 0 : Number(row.CNT),
-          };
-          return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
-        }),
-      ),
+    async (dataAccess, args) => {
+      const owner = await resolveSchemaFor(ctx, args.schema, 'count_rows');
+      const table = assertIdentifier(args.table, 'table');
+      const row = await ctx.dataAccess.queryForObject(
+        `SELECT COUNT(*) AS cnt FROM ${qualifiedName(owner, table)}`,
+      );
+      const result = {
+        schema: owner,
+        table,
+        rowCount: row?.CNT === null || row?.CNT === undefined ? 0 : Number(row.CNT),
+      };
+      return jsonResult(result);
+    },
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'get_next_sequence_value',
+    'Return the NEXTVAL of a sequence. WARNING: this is a side-effecting read — calling it advances the sequence counter and the consumed value cannot be reused. When the sequence has cache > 0 the returned value may already be consumed elsewhere; before using it as a key, verify it is not already present in the target table. Use sparingly.',
     {
-      description:
-        'Return the NEXTVAL of a sequence. WARNING: this is a side-effecting read — calling it advances the sequence counter and the consumed value cannot be reused. When the sequence has cache > 0 the returned value may already be consumed elsewhere; before using it as a key, verify it is not already present in the target table. Use sparingly.',
-      inputSchema: {
-        schema: z
-          .string()
-          .describe(
-            "Schema (owner) of the sequence. Optional — defaults to the server's current schema; omit rather than guess.",
-          )
-          .optional(),
-        sequence: z.string().describe('Sequence name.'),
-      },
+      schema: z
+        .string()
+        .describe(
+          "Schema (owner) of the sequence. Optional — defaults to the server's current schema; omit rather than guess.",
+        )
+        .optional(),
+      sequence: z.string().describe('Sequence name.'),
     },
-    async (args) =>
-      withToolContext('get_next_sequence_value', args, () =>
-        guardTool(async () => {
-          const owner = await resolveSchemaFor(ctx, args.schema, 'get_next_sequence_value');
-          const sequence = assertIdentifier(args.sequence, 'sequence');
-          const row = await ctx.dataAccess.queryForObject(
-            `SELECT ${qualifiedName(owner, sequence)}.NEXTVAL AS nextval FROM dual`,
-          );
-          const result = { schema: owner, sequence, nextValue: Number(row?.NEXTVAL ?? 0) };
-          return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
-        }),
-      ),
+    async (dataAccess, args) => {
+      const owner = await resolveSchemaFor(ctx, args.schema, 'get_next_sequence_value');
+      const sequence = assertIdentifier(args.sequence, 'sequence');
+      const row = await ctx.dataAccess.queryForObject(
+        `SELECT ${qualifiedName(owner, sequence)}.NEXTVAL AS nextval FROM dual`,
+      );
+      const result = { schema: owner, sequence, nextValue: Number(row?.NEXTVAL ?? 0) };
+      return jsonResult(result);
+    },
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'validate_fk_integrity',
+    'Check one or all foreign keys of a table and report orphan rows (child rows whose parent is missing). Returns one entry per FK with constraint name, child/parent columns and the orphan count; an empty list means referential integrity is intact.',
     {
-      description:
-        'Check one or all foreign keys of a table and report orphan rows (child rows whose parent is missing). Returns one entry per FK with constraint name, child/parent columns and the orphan count; an empty list means referential integrity is intact.',
-      inputSchema: {
-        schema: z
-          .string()
-          .describe(
-            "Schema (owner) of the table. Optional — defaults to the server's current schema; omit rather than guess.",
-          )
-          .optional(),
-        table: z.string().describe('Table name.'),
-        constraint: z
-          .string()
-          .describe('Optional constraint-name filter; omit to check every FK on the table.')
-          .optional(),
-      },
+      schema: z
+        .string()
+        .describe(
+          "Schema (owner) of the table. Optional — defaults to the server's current schema; omit rather than guess.",
+        )
+        .optional(),
+      table: z.string().describe('Table name.'),
+      constraint: z
+        .string()
+        .describe('Optional constraint-name filter; omit to check every FK on the table.')
+        .optional(),
     },
-    async (args) =>
-      withToolContext('validate_fk_integrity', args, () =>
-        guardTool(async () => {
-          const owner = await resolveSchemaFor(ctx, args.schema, 'validate_fk_integrity');
-          const table = assertIdentifier(args.table, 'table');
-          const fks = await validateFkIntegrity(
-            ctx.dataAccess,
-            owner,
-            table,
-            blankToNull(args.constraint),
-          );
-          return { content: [{ type: 'text' as const, text: JSON.stringify(fks) }] };
-        }),
-      ),
+    async (dataAccess, args) => {
+      const owner = await resolveSchemaFor(ctx, args.schema, 'validate_fk_integrity');
+      const table = assertIdentifier(args.table, 'table');
+      const fks = await validateFkIntegrity(
+        ctx.dataAccess,
+        owner,
+        table,
+        blankToNull(args.constraint),
+      );
+      return jsonResult(fks);
+    },
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'get_dependency_graph',
+    'Build an object-dependency graph for a schema using all_dependencies. Returns directed edges (dependent→referenced) filtered by optional name/type, plus a Mermaid diagram string.',
     {
-      description:
-        'Build an object-dependency graph for a schema using all_dependencies. Returns directed edges (dependent→referenced) filtered by optional name/type, plus a Mermaid diagram string.',
-      inputSchema: {
-        schema: z
-          .string()
-          .describe(
-            "Schema (owner) to inspect. Optional — defaults to the server's current schema; omit rather than guess.",
-          )
-          .optional(),
-        name: z.string().describe('Optional object name to scope the graph.').optional(),
-        type: z
-          .string()
-          .describe('Optional object-type filter (TABLE, VIEW, PROCEDURE, PACKAGE, …).')
-          .optional(),
-      },
+      schema: z
+        .string()
+        .describe(
+          "Schema (owner) to inspect. Optional — defaults to the server's current schema; omit rather than guess.",
+        )
+        .optional(),
+      name: z.string().describe('Optional object name to scope the graph.').optional(),
+      type: z
+        .string()
+        .describe('Optional object-type filter (TABLE, VIEW, PROCEDURE, PACKAGE, …).')
+        .optional(),
     },
-    async (args) =>
-      withToolContext('get_dependency_graph', args, () =>
-        guardTool(async () => {
-          const graph = await dependencyGraph(
-            ctx.dataAccess,
-            await resolveSchemaFor(ctx, args.schema, 'get_dependency_graph'),
-            args.name,
-            args.type,
-          );
-          return { content: [{ type: 'text' as const, text: JSON.stringify(graph) }] };
-        }),
-      ),
+    async (dataAccess, args) => {
+      const graph = await dependencyGraph(
+        ctx.dataAccess,
+        await resolveSchemaFor(ctx, args.schema, 'get_dependency_graph'),
+        args.name,
+        args.type,
+      );
+      return jsonResult(graph);
+    },
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'get_fk_graph',
+    'Build a foreign-key relationship graph for a schema or a single table. Returns directed edges (child→parent) and a Mermaid diagram string.',
     {
-      description:
-        'Build a foreign-key relationship graph for a schema or a single table. Returns directed edges (child→parent) and a Mermaid diagram string.',
-      inputSchema: {
-        schema: z
-          .string()
-          .describe(
-            "Schema (owner) to inspect. Optional — defaults to the server's current schema; omit rather than guess.",
-          )
-          .optional(),
-        table: z
-          .string()
-          .describe('Optional table name to scope the graph. Leave blank for the entire schema.')
-          .optional(),
-      },
+      schema: z
+        .string()
+        .describe(
+          "Schema (owner) to inspect. Optional — defaults to the server's current schema; omit rather than guess.",
+        )
+        .optional(),
+      table: z
+        .string()
+        .describe('Optional table name to scope the graph. Leave blank for the entire schema.')
+        .optional(),
     },
-    async (args) =>
-      withToolContext('get_fk_graph', args, () =>
-        guardTool(async () => {
-          const graph = await fkGraph(
-            ctx.dataAccess,
-            await resolveSchemaFor(ctx, args.schema, 'get_fk_graph'),
-            args.table,
-          );
-          return { content: [{ type: 'text' as const, text: JSON.stringify(graph) }] };
-        }),
-      ),
+    async (dataAccess, args) => {
+      const graph = await fkGraph(
+        ctx.dataAccess,
+        await resolveSchemaFor(ctx, args.schema, 'get_fk_graph'),
+        args.table,
+      );
+      return jsonResult(graph);
+    },
   );
 }

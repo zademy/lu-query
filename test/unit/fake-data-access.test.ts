@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { MAX_ROWS } from '../../src/config.js';
 import { FakeDataAccess } from '../../src/db/fake-data-access.js';
 
 describe('FakeDataAccess', () => {
@@ -44,6 +45,14 @@ describe('FakeDataAccess', () => {
         options: { maxRows: 5 },
       },
     ]);
+  });
+
+  it('aplica el mismo tope de filas que el chokepoint', async () => {
+    const rows = Array.from({ length: 1200 }, (_, id) => ({ id }));
+    const data = new FakeDataAccess().always(() => ({ rows }));
+
+    expect(await data.queryForList('SELECT id FROM t')).toHaveLength(MAX_ROWS);
+    expect(await data.queryForList('SELECT id FROM t', [], { maxRows: 3 })).toHaveLength(3);
   });
 
   it('close() es inocuo y marca que se cerró', async () => {
