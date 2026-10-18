@@ -58,9 +58,13 @@ describe.skipIf(!optIn)('Schema de sesion contra Oracle real, sin ORACLE_DB_SCHE
   const call = async (name: string, args: Record<string, unknown> = {}): Promise<ToolResult> =>
     (await client.callTool({ name, arguments: args })) as ToolResult;
 
-  const rows = async (name: string, args: Record<string, unknown>): Promise<Record<string, unknown>[]> => {
+  const rows = async (
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<Record<string, unknown>[]> => {
     const resultado = await call(name, args);
-    if (resultado.isError) throw new Error(name + ': ' + (resultado.content[0]?.text ?? 'sin texto'));
+    if (resultado.isError)
+      throw new Error(name + ': ' + (resultado.content[0]?.text ?? 'sin texto'));
     return JSON.parse(resultado.content[0]?.text ?? '[]') as Record<string, unknown>[];
   };
 

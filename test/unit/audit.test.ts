@@ -283,7 +283,6 @@ describe('hook de auditoría en el chokepoint DataAccess', () => {
     return readFile(join(dir, file!), 'utf8');
   }
 
-
   it('deja una entrada por sentencia con tool, kind, type, filas y SQL verbatim', async () => {
     const rows = await withToolContext(
       'run_query',
@@ -357,7 +356,6 @@ describe('hook de auditoría en el chokepoint DataAccess', () => {
 
   it('apagar MCP_AUDIT_ENABLED deja el chokepoint intacto y sin escribir', async () => {
     const apagada = createFileAuditWriter({ enabled: false, dir });
-
 
     await expect(
       withToolContext('run_query', {}, () => audited(apagada).queryForList('SELECT 1 FROM dual')),

@@ -87,51 +87,51 @@ describe.skipIf(!optIn)('features de Oracle contra el contenedor real', () => {
     await db.execute('CREATE TYPE ' + VARRAY + ' AS VARRAY(10) OF NUMBER');
 
     await db.execute(
-      'CREATE TABLE ' + BASE + ' (ID NUMBER PRIMARY KEY, TXT VARCHAR2(50), AMT NUMBER(10,2), CREATED DATE)',
+      'CREATE TABLE ' +
+        BASE +
+        ' (ID NUMBER PRIMARY KEY, TXT VARCHAR2(50), AMT NUMBER(10,2), CREATED DATE)',
     );
     await db.execute(
-      'INSERT INTO ' + BASE + " (ID, TXT, AMT, CREATED) SELECT LEVEL, 'txt' || LEVEL, LEVEL * 10, SYSDATE FROM DUAL CONNECT BY LEVEL <= 20",
+      'INSERT INTO ' +
+        BASE +
+        " (ID, TXT, AMT, CREATED) SELECT LEVEL, 'txt' || LEVEL, LEVEL * 10, SYSDATE FROM DUAL CONNECT BY LEVEL <= 20",
     );
     await db.execute('CREATE TABLE ' + CHILD + ' (ID NUMBER PRIMARY KEY, BASE_ID NUMBER)');
     await db.execute(
-      'ALTER TABLE ' + CHILD + ' ADD CONSTRAINT FK_' + CHILD + ' FOREIGN KEY (BASE_ID) REFERENCES ' + BASE + '(ID)',
+      'ALTER TABLE ' +
+        CHILD +
+        ' ADD CONSTRAINT FK_' +
+        CHILD +
+        ' FOREIGN KEY (BASE_ID) REFERENCES ' +
+        BASE +
+        '(ID)',
     );
     await db.execute('INSERT INTO ' + CHILD + ' (ID, BASE_ID) VALUES (1, 1)');
 
     await db.execute(
-      'CREATE TABLE ' + PART + " (ID NUMBER, D DATE) PARTITION BY RANGE (D) (PARTITION P_OLD VALUES LESS THAN (DATE '2020-01-01'), PARTITION P_NEW VALUES LESS THAN (DATE '2030-01-01'))",
+      'CREATE TABLE ' +
+        PART +
+        " (ID NUMBER, D DATE) PARTITION BY RANGE (D) (PARTITION P_OLD VALUES LESS THAN (DATE '2020-01-01'), PARTITION P_NEW VALUES LESS THAN (DATE '2030-01-01'))",
     );
+    await db.execute('INSERT INTO ' + PART + " VALUES (1, DATE '2019-01-01')");
+    await db.execute('INSERT INTO ' + PART + " VALUES (2, DATE '2024-01-01')");
     await db.execute(
-      "INSERT INTO " + PART + " VALUES (1, DATE '2019-01-01')",
-    );
-    await db.execute(
-      "INSERT INTO " + PART + " VALUES (2, DATE '2024-01-01')",
-    );
-    await db.execute(
-      "CREATE TABLE " + LIST + " (ID NUMBER, C VARCHAR2(10)) PARTITION BY LIST (C) (PARTITION PA VALUES ('A','B'), PARTITION PB VALUES (DEFAULT))",
+      'CREATE TABLE ' +
+        LIST +
+        " (ID NUMBER, C VARCHAR2(10)) PARTITION BY LIST (C) (PARTITION PA VALUES ('A','B'), PARTITION PB VALUES (DEFAULT))",
     );
     await db.execute('CREATE TABLE ' + HASH + ' (ID NUMBER) PARTITION BY HASH (ID) PARTITIONS 2');
 
     await db.execute('CREATE TABLE ' + LOB + ' (ID NUMBER, C CLOB, B BLOB)');
-    await db.execute(
-      "INSERT INTO " + LOB + " (ID, C) VALUES (1, 'texto del clob')",
-    );
+    await db.execute('INSERT INTO ' + LOB + " (ID, C) VALUES (1, 'texto del clob')");
     await db.execute('CREATE TABLE ' + JSONT + ' (ID NUMBER, J JSON)');
-    await db.execute(
-      "INSERT INTO " + JSONT + " (ID, J) VALUES (1, '{\"a\":1}')",
-    );
+    await db.execute('INSERT INTO ' + JSONT + ' (ID, J) VALUES (1, \'{"a":1}\')');
     await db.execute('CREATE TABLE ' + XMLT + ' (ID NUMBER, X SYS.XMLTYPE)');
-    await db.execute(
-      "INSERT INTO " + XMLT + " (ID, X) VALUES (1, XMLTYPE('<a>1</a>'))",
-    );
+    await db.execute('INSERT INTO ' + XMLT + " (ID, X) VALUES (1, XMLTYPE('<a>1</a>'))");
     await db.execute('CREATE TABLE ' + OBJT + ' (ID NUMBER, O ' + TYPE + ')');
-    await db.execute(
-      'INSERT INTO ' + OBJT + ' (ID, O) VALUES (1, ' + TYPE + "(1, 'x'))",
-    );
+    await db.execute('INSERT INTO ' + OBJT + ' (ID, O) VALUES (1, ' + TYPE + "(1, 'x'))");
     await db.execute('CREATE TABLE ' + VAT + ' (ID NUMBER, V ' + VARRAY + ')');
-    await db.execute(
-      'INSERT INTO ' + VAT + ' (ID, V) VALUES (1, ' + VARRAY + '(1,2))',
-    );
+    await db.execute('INSERT INTO ' + VAT + ' (ID, V) VALUES (1, ' + VARRAY + '(1,2))');
     await db.execute(
       'CREATE TABLE ' + IDENT + ' (ID NUMBER GENERATED ALWAYS AS IDENTITY, T VARCHAR2(20))',
     );
@@ -141,18 +141,24 @@ describe.skipIf(!optIn)('features de Oracle contra el contenedor real', () => {
     await db.execute(
       'CREATE TABLE ' + IOT + ' (ID NUMBER PRIMARY KEY, TXT VARCHAR2(20)) ORGANIZATION INDEX',
     );
-    await db.execute(
-      'CREATE GLOBAL TEMPORARY TABLE ' + GTT + ' (ID NUMBER) ON COMMIT DELETE ROWS',
-    );
+    await db.execute('CREATE GLOBAL TEMPORARY TABLE ' + GTT + ' (ID NUMBER) ON COMMIT DELETE ROWS');
 
     await db.execute('CREATE VIEW ' + VW + ' AS SELECT ID, TXT FROM ' + BASE);
     await db.execute(
-      'CREATE VIEW ' + VW_JOIN + ' AS SELECT b.ID, c.ID AS CHILD_ID FROM ' + BASE + ' b JOIN ' + CHILD + ' c ON c.BASE_ID = b.ID',
+      'CREATE VIEW ' +
+        VW_JOIN +
+        ' AS SELECT b.ID, c.ID AS CHILD_ID FROM ' +
+        BASE +
+        ' b JOIN ' +
+        CHILD +
+        ' c ON c.BASE_ID = b.ID',
     );
     await db.execute('CREATE MATERIALIZED VIEW ' + MV + ' AS SELECT ID, TXT FROM ' + BASE);
 
     await db.execute(
-      'CREATE OR REPLACE PACKAGE ' + PKG + ' AS ' +
+      'CREATE OR REPLACE PACKAGE ' +
+        PKG +
+        ' AS ' +
         'PROCEDURE P1(P_ID IN NUMBER); ' +
         'PROCEDURE P1(P_ID IN NUMBER, P_MSG OUT VARCHAR2); ' +
         'FUNCTION F1 RETURN NUMBER; ' +
@@ -160,35 +166,42 @@ describe.skipIf(!optIn)('features de Oracle contra el contenedor real', () => {
         'END;',
     );
     await db.execute(
-      'CREATE OR REPLACE PACKAGE BODY ' + PKG + ' AS ' +
+      'CREATE OR REPLACE PACKAGE BODY ' +
+        PKG +
+        ' AS ' +
         'PROCEDURE P1(P_ID IN NUMBER) IS BEGIN NULL; END; ' +
-        'PROCEDURE P1(P_ID IN NUMBER, P_MSG OUT VARCHAR2) IS BEGIN P_MSG := ' + "'ok' || P_ID; END; " +
+        'PROCEDURE P1(P_ID IN NUMBER, P_MSG OUT VARCHAR2) IS BEGIN P_MSG := ' +
+        "'ok' || P_ID; END; " +
         'FUNCTION F1 RETURN NUMBER IS BEGIN RETURN 42; END; ' +
         "FUNCTION F2(P_ID IN NUMBER) RETURN VARCHAR2 IS BEGIN RETURN 'fn' || P_ID; END; " +
         'END;',
     );
-    await db.execute(
-      'CREATE OR REPLACE FUNCTION ' + FN + ' RETURN NUMBER IS BEGIN RETURN 7; END;',
-    );
-    await db.execute(
-      'CREATE OR REPLACE PROCEDURE ' + PR + ' AS BEGIN NULL; END;',
-    );
+    await db.execute('CREATE OR REPLACE FUNCTION ' + FN + ' RETURN NUMBER IS BEGIN RETURN 7; END;');
+    await db.execute('CREATE OR REPLACE PROCEDURE ' + PR + ' AS BEGIN NULL; END;');
     // Objeto invalido a proposito: lista en ALL_OBJECTS pero no compila.
     await db.execute(
-      'CREATE OR REPLACE PROCEDURE ' + BROKEN + ' AS BEGIN INSERT INTO T93_IT_NO_EXISTE VALUES (1); END;',
+      'CREATE OR REPLACE PROCEDURE ' +
+        BROKEN +
+        ' AS BEGIN INSERT INTO T93_IT_NO_EXISTE VALUES (1); END;',
     );
     await db.execute(
-      'CREATE OR REPLACE TRIGGER ' + TRG + ' BEFORE INSERT ON ' + BASE + ' FOR EACH ROW BEGIN NULL; END;',
+      'CREATE OR REPLACE TRIGGER ' +
+        TRG +
+        ' BEFORE INSERT ON ' +
+        BASE +
+        ' FOR EACH ROW BEGIN NULL; END;',
     );
     await db.execute(
-      'CREATE OR REPLACE TRIGGER ' + TRC + ' FOR INSERT ON ' + BASE + ' COMPOUND TRIGGER BEFORE STATEMENT IS BEGIN NULL; END BEFORE STATEMENT; END;',
+      'CREATE OR REPLACE TRIGGER ' +
+        TRC +
+        ' FOR INSERT ON ' +
+        BASE +
+        ' COMPOUND TRIGGER BEFORE STATEMENT IS BEGIN NULL; END BEFORE STATEMENT; END;',
     );
 
     await db.execute('CREATE SEQUENCE ' + SEQ);
     await db.execute('CREATE SEQUENCE ' + SEQ_CACHE + ' CACHE 20');
-    await db.execute(
-      'CREATE SEQUENCE ' + SEQ_CYCLE + ' MINVALUE 1 MAXVALUE 3 CYCLE NOCACHE',
-    );
+    await db.execute('CREATE SEQUENCE ' + SEQ_CYCLE + ' MINVALUE 1 MAXVALUE 3 CYCLE NOCACHE');
 
     await db.execute('CREATE INDEX ' + IDX + ' ON ' + BASE + ' (TXT, AMT)');
     await db.execute('CREATE UNIQUE INDEX ' + IDX_UNQ + ' ON ' + BASE + ' (TXT)');
@@ -197,9 +210,7 @@ describe.skipIf(!optIn)('features de Oracle contra el contenedor real', () => {
     await db.execute('CREATE INDEX ' + IDX_INV + ' ON ' + BASE + ' (CREATED) INVISIBLE');
     await db.execute('CREATE SYNONYM ' + SYN + ' FOR ' + BASE);
 
-    await db.execute(
-      'BEGIN DBMS_STATS.GATHER_TABLE_STATS(USER, ' + "'" + BASE + "'" + '); END;',
-    );
+    await db.execute('BEGIN DBMS_STATS.GATHER_TABLE_STATS(USER, ' + "'" + BASE + "'" + '); END;');
   }, 180_000);
 
   afterAll(async () => {
@@ -259,8 +270,6 @@ describe.skipIf(!optIn)('features de Oracle contra el contenedor real', () => {
     args: Record<string, unknown> = {},
   ): Promise<Record<string, unknown>[]> =>
     JSON.parse(await text(name, args)) as Record<string, unknown>[];
-
-
 
   describe('tablas y columnas', () => {
     it('describe_table ve la identidad y la columna virtual', async () => {
@@ -433,7 +442,12 @@ describe.skipIf(!optIn)('features de Oracle contra el contenedor real', () => {
       ) as { rows: { ID: number; CHILD_ID: number }[] };
       const viaJoin = JSON.parse(
         await text('run_query', {
-          sql: 'SELECT b.ID ID, c.ID CHILD_ID FROM ' + BASE + ' b JOIN ' + CHILD + ' c ON c.BASE_ID = b.ID',
+          sql:
+            'SELECT b.ID ID, c.ID CHILD_ID FROM ' +
+            BASE +
+            ' b JOIN ' +
+            CHILD +
+            ' c ON c.BASE_ID = b.ID',
         }),
       ) as { rows: { ID: number; CHILD_ID: number }[] };
       expect(viaView.rows).toEqual(viaJoin.rows);

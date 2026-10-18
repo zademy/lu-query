@@ -56,28 +56,42 @@ describe.skipIf(!optIn)('el SQL de Oracle por el MCP, a fondo', () => {
     client = new Client({ name: 'lu-query-sqlzoo-integration', version: '0.0.0' });
     await Promise.all([handle.server.connect(serverTransport), client.connect(clientTransport)]);
 
-    await db.execute('CREATE TABLE ' + HIER + ' (ID NUMBER PRIMARY KEY, PARENT_ID NUMBER, NAME VARCHAR2(30))');
     await db.execute(
-      "INSERT INTO " + HIER + " VALUES (1, NULL, 'root'), (2, 1, 'a'), (3, 1, 'b'), (4, 2, 'a1'), (5, 4, 'a11')",
+      'CREATE TABLE ' + HIER + ' (ID NUMBER PRIMARY KEY, PARENT_ID NUMBER, NAME VARCHAR2(30))',
     );
-    await db.execute('CREATE TABLE ' + SALES + ' (ID NUMBER PRIMARY KEY, REGION VARCHAR2(10), AMT NUMBER, SOLD_AT DATE)');
     await db.execute(
-      "INSERT INTO " + SALES + " VALUES (1, 'N', 10, DATE '2024-01-15'), (2, 'N', 20, DATE '2024-02-20'), " +
+      'INSERT INTO ' +
+        HIER +
+        " VALUES (1, NULL, 'root'), (2, 1, 'a'), (3, 1, 'b'), (4, 2, 'a1'), (5, 4, 'a11')",
+    );
+    await db.execute(
+      'CREATE TABLE ' +
+        SALES +
+        ' (ID NUMBER PRIMARY KEY, REGION VARCHAR2(10), AMT NUMBER, SOLD_AT DATE)',
+    );
+    await db.execute(
+      'INSERT INTO ' +
+        SALES +
+        " VALUES (1, 'N', 10, DATE '2024-01-15'), (2, 'N', 20, DATE '2024-02-20'), " +
         "(3, 'S', 30, DATE '2024-01-05'), (4, 'S', 40, DATE '2024-03-25'), " +
         "(5, 'E', 50, DATE '2024-02-28'), (6, 'E', 60, DATE '2024-04-01')",
     );
     await db.execute('CREATE TABLE ' + JSONT + ' (ID NUMBER PRIMARY KEY, DOC JSON)');
     await db.execute(
-      "INSERT INTO " + JSONT + " VALUES (1, '{\"nombre\": \"ana\", \"edad\": 33, \"tags\": [\"a\", \"b\"]}')",
+      'INSERT INTO ' + JSONT + ' VALUES (1, \'{"nombre": "ana", "edad": 33, "tags": ["a", "b"]}\')',
     );
     await db.execute('CREATE TABLE ' + XMLT + ' (ID NUMBER PRIMARY KEY, DOC XMLTYPE)');
     await db.execute(
-      "INSERT INTO " + XMLT + " VALUES (1, XMLTYPE('<root><item name=\"uno\"/><item name=\"dos\"/></root>'))",
+      'INSERT INTO ' +
+        XMLT +
+        ' VALUES (1, XMLTYPE(\'<root><item name="uno"/><item name="dos"/></root>\'))',
     );
     await db.execute('CREATE TABLE ' + TGT + ' (ID NUMBER PRIMARY KEY, N NUMBER)');
     await db.execute('CREATE TABLE ' + MVB + ' (ID NUMBER PRIMARY KEY, TXT VARCHAR2(20))');
-    await db.execute("INSERT INTO " + MVB + " VALUES (1, 'a'), (2, 'b')");
-    await db.execute('CREATE VIEW ' + V_CHK + ' AS SELECT ID, N FROM ' + TGT + ' WHERE N > 0 WITH CHECK OPTION');
+    await db.execute('INSERT INTO ' + MVB + " VALUES (1, 'a'), (2, 'b')");
+    await db.execute(
+      'CREATE VIEW ' + V_CHK + ' AS SELECT ID, N FROM ' + TGT + ' WHERE N > 0 WITH CHECK OPTION',
+    );
     await db.execute('CREATE VIEW ' + V_RO + ' AS SELECT ID FROM ' + TGT + ' WITH READ ONLY');
     await db.execute('CREATE MATERIALIZED VIEW ' + MV + ' AS SELECT ID, TXT FROM ' + MVB);
   }, 120_000);
@@ -107,13 +121,16 @@ describe.skipIf(!optIn)('el SQL de Oracle por el MCP, a fondo', () => {
   const rows = async (sql: string): Promise<Record<string, unknown>[]> => {
     const resultado = await call('run_query', { sql });
     if (resultado.isError) throw new Error(resultado.content[0]?.text ?? 'error sin texto');
-    return (JSON.parse(resultado.content[0]?.text ?? '{}') as { rows: Record<string, unknown>[] }).rows;
+    return (JSON.parse(resultado.content[0]?.text ?? '{}') as { rows: Record<string, unknown>[] })
+      .rows;
   };
 
   describe('jerarquias y recursividad', () => {
     it('CONNECT BY PRIOR devuelve el arbol con su LEVEL', async () => {
       const resultado = await rows(
-        'SELECT ID, NAME, LEVEL AS LVL FROM ' + HIER + ' START WITH ID = 1 CONNECT BY PRIOR ID = PARENT_ID',
+        'SELECT ID, NAME, LEVEL AS LVL FROM ' +
+          HIER +
+          ' START WITH ID = 1 CONNECT BY PRIOR ID = PARENT_ID',
       );
       expect(resultado).toHaveLength(5);
       // CONNECT BY es en profundidad: 1, 2, 4, 5 y luego el otro hijo 3.
@@ -122,7 +139,9 @@ describe.skipIf(!optIn)('el SQL de Oracle por el MCP, a fondo', () => {
 
     it('CONNECT BY con una raiz distinta acota el subarbol', async () => {
       const resultado = await rows(
-        'SELECT ID, LEVEL AS LVL FROM ' + HIER + ' START WITH ID = 2 CONNECT BY PRIOR ID = PARENT_ID',
+        'SELECT ID, LEVEL AS LVL FROM ' +
+          HIER +
+          ' START WITH ID = 2 CONNECT BY PRIOR ID = PARENT_ID',
       );
       expect(resultado).toHaveLength(3);
       expect(resultado.map((r) => Number(r.LVL))).toEqual([1, 2, 3]);
@@ -130,8 +149,12 @@ describe.skipIf(!optIn)('el SQL de Oracle por el MCP, a fondo', () => {
 
     it('CTE recursivo con UNION ALL', async () => {
       const resultado = await rows(
-        'WITH R (ID, PARENT_ID, LVL) AS (SELECT ID, PARENT_ID, 1 AS LVL FROM ' + HIER + ' WHERE PARENT_ID IS NULL ' +
-          'UNION ALL SELECT H.ID, H.PARENT_ID, R.LVL + 1 FROM ' + HIER + ' H JOIN R ON H.PARENT_ID = R.ID) ' +
+        'WITH R (ID, PARENT_ID, LVL) AS (SELECT ID, PARENT_ID, 1 AS LVL FROM ' +
+          HIER +
+          ' WHERE PARENT_ID IS NULL ' +
+          'UNION ALL SELECT H.ID, H.PARENT_ID, R.LVL + 1 FROM ' +
+          HIER +
+          ' H JOIN R ON H.PARENT_ID = R.ID) ' +
           'SELECT ID, LVL FROM R ORDER BY ID',
       );
       expect(resultado).toHaveLength(5);
@@ -140,7 +163,9 @@ describe.skipIf(!optIn)('el SQL de Oracle por el MCP, a fondo', () => {
 
     it('CONNECT BY PRIOR con siblings conserva el orden de Oracle', async () => {
       const resultado = await rows(
-        'SELECT ID FROM ' + HIER + ' START WITH ID = 1 CONNECT BY PRIOR ID = PARENT_ID ORDER SIBLINGS BY ID',
+        'SELECT ID FROM ' +
+          HIER +
+          ' START WITH ID = 1 CONNECT BY PRIOR ID = PARENT_ID ORDER SIBLINGS BY ID',
       );
       expect(resultado.map((r) => Number(r.ID))).toEqual([1, 2, 4, 5, 3]);
     });
@@ -150,7 +175,9 @@ describe.skipIf(!optIn)('el SQL de Oracle por el MCP, a fondo', () => {
     it('LAG y LEAD sobre la serie ordenada', async () => {
       const resultado = await rows(
         'SELECT ID, AMT, LAG(AMT) OVER (ORDER BY ID) AS PREV, LEAD(AMT) OVER (ORDER BY ID) AS NEXT ' +
-          'FROM ' + SALES + ' ORDER BY ID',
+          'FROM ' +
+          SALES +
+          ' ORDER BY ID',
       );
       expect(resultado).toHaveLength(6);
       expect(resultado[0]?.PREV).toBeNull();
@@ -161,7 +188,9 @@ describe.skipIf(!optIn)('el SQL de Oracle por el MCP, a fondo', () => {
     it('RANK y NTILE reparten la serie', async () => {
       const resultado = await rows(
         'SELECT ID, RANK() OVER (ORDER BY AMT DESC) AS RNK, NTILE(2) OVER (ORDER BY ID) AS MITAD ' +
-          'FROM ' + SALES + ' ORDER BY AMT DESC',
+          'FROM ' +
+          SALES +
+          ' ORDER BY AMT DESC',
       );
       expect(resultado).toHaveLength(6);
       expect(Number(resultado[0]?.RNK)).toBe(1);
@@ -172,7 +201,9 @@ describe.skipIf(!optIn)('el SQL de Oracle por el MCP, a fondo', () => {
     it('SUM OVER PARTITION BY totaliza por region', async () => {
       const resultado = await rows(
         'SELECT REGION, AMT, SUM(AMT) OVER (PARTITION BY REGION) AS TOTAL ' +
-          'FROM ' + SALES + ' ORDER BY ID',
+          'FROM ' +
+          SALES +
+          ' ORDER BY ID',
       );
       expect(resultado).toHaveLength(6);
       expect(Number(resultado[0]?.TOTAL)).toBe(30);
@@ -181,8 +212,10 @@ describe.skipIf(!optIn)('el SQL de Oracle por el MCP, a fondo', () => {
 
     it('LISTAGG y COUNT OVER بقيeran el agregado', async () => {
       const resultado = await rows(
-        'SELECT REGION, LISTAGG(ID, \',\') WITHIN GROUP (ORDER BY ID) AS IDS, ' +
-          'SUM(COUNT(*)) OVER (PARTITION BY REGION) AS N FROM ' + SALES + ' GROUP BY REGION ORDER BY REGION',
+        "SELECT REGION, LISTAGG(ID, ',') WITHIN GROUP (ORDER BY ID) AS IDS, " +
+          'SUM(COUNT(*)) OVER (PARTITION BY REGION) AS N FROM ' +
+          SALES +
+          ' GROUP BY REGION ORDER BY REGION',
       );
       expect(resultado).toHaveLength(3);
       const norte = resultado.find((r) => r.REGION === 'N');
@@ -194,7 +227,9 @@ describe.skipIf(!optIn)('el SQL de Oracle por el MCP, a fondo', () => {
   describe('PIVOT y UNPIVOT', () => {
     it('PIVOT cruza la serie en columnas por region', async () => {
       const resultado = await rows(
-        'SELECT * FROM (SELECT REGION, AMT FROM ' + SALES + ') PIVOT (SUM(AMT) FOR REGION IN (\'N\' AS N, \'S\' AS S, \'E\' AS E))',
+        'SELECT * FROM (SELECT REGION, AMT FROM ' +
+          SALES +
+          ") PIVOT (SUM(AMT) FOR REGION IN ('N' AS N, 'S' AS S, 'E' AS E))",
       );
       expect(resultado).toHaveLength(1);
       expect(Number(resultado[0]?.N)).toBe(30);
@@ -204,8 +239,10 @@ describe.skipIf(!optIn)('el SQL de Oracle por el MCP, a fondo', () => {
 
     it('UNPIVOT devuelve las filas al formato largo', async () => {
       const resultado = await rows(
-        'SELECT REGION, AMT FROM (SELECT * FROM (SELECT REGION, AMT FROM ' + SALES + ') ' +
-          'PIVOT (SUM(AMT) FOR REGION IN (\'N\' AS N, \'S\' AS S))) UNPIVOT (AMT FOR REGION IN (N, S))',
+        'SELECT REGION, AMT FROM (SELECT * FROM (SELECT REGION, AMT FROM ' +
+          SALES +
+          ') ' +
+          "PIVOT (SUM(AMT) FOR REGION IN ('N' AS N, 'S' AS S))) UNPIVOT (AMT FOR REGION IN (N, S))",
       );
       expect(resultado.length).toBeGreaterThan(0);
     });
@@ -214,7 +251,8 @@ describe.skipIf(!optIn)('el SQL de Oracle por el MCP, a fondo', () => {
   describe('JSON y XML', () => {
     it('JSON_VALUE lee un escalar del documento', async () => {
       const resultado = await rows(
-        "SELECT JSON_VALUE(DOC, '$.nombre') AS NOMBRE, JSON_VALUE(DOC, '$.edad') AS EDAD FROM " + JSONT,
+        "SELECT JSON_VALUE(DOC, '$.nombre') AS NOMBRE, JSON_VALUE(DOC, '$.edad') AS EDAD FROM " +
+          JSONT,
       );
       expect(resultado).toHaveLength(1);
       expect(resultado[0]?.NOMBRE).toBe('ana');
@@ -223,20 +261,26 @@ describe.skipIf(!optIn)('el SQL de Oracle por el MCP, a fondo', () => {
 
     it('JSON_TABLE aplana un array', async () => {
       const resultado = await rows(
-        "SELECT t.TAG FROM " + JSONT + " j, JSON_TABLE(j.DOC, '$.tags[*]' COLUMNS(TAG VARCHAR2(10) PATH '$')) t",
+        'SELECT t.TAG FROM ' +
+          JSONT +
+          " j, JSON_TABLE(j.DOC, '$.tags[*]' COLUMNS(TAG VARCHAR2(10) PATH '$')) t",
       );
       expect(resultado.map((r) => r.TAG)).toEqual(['a', 'b']);
     });
 
     it('JSON_OBJECT arma un documento en la consulta', async () => {
-      const resultado = await rows("SELECT JSON_OBJECT('a' VALUE 1, 'b' VALUE 'x') AS DOC FROM DUAL");
+      const resultado = await rows(
+        "SELECT JSON_OBJECT('a' VALUE 1, 'b' VALUE 'x') AS DOC FROM DUAL",
+      );
       expect(resultado).toHaveLength(1);
       expect(String(resultado[0]?.DOC)).toContain('"a"');
     });
 
     it('XMLTABLE recorre los nodos de un XMLTYPE', async () => {
       const resultado = await rows(
-        "SELECT t.NOMBRE FROM " + XMLT + " x, " +
+        'SELECT t.NOMBRE FROM ' +
+          XMLT +
+          ' x, ' +
           "XMLTABLE('/root/item' PASSING x.DOC COLUMNS NOMBRE VARCHAR2(20) PATH '@name') t",
       );
       expect(resultado.map((r) => r.NOMBRE)).toEqual(['uno', 'dos']);
@@ -254,7 +298,9 @@ describe.skipIf(!optIn)('el SQL de Oracle por el MCP, a fondo', () => {
         'SELECT EXTRACT(YEAR FROM SOLD_AT) AS ANIO, EXTRACT(MONTH FROM SOLD_AT) AS MES, ' +
           "TO_CHAR(ADD_MONTHS(SOLD_AT, 1), 'YYYY-MM') AS MES_SIGUIENTE, " +
           "TO_CHAR(TRUNC(SOLD_AT, 'MM'), 'YYYY-MM-DD') AS MES_TRUNCADO " +
-          'FROM ' + SALES + ' WHERE ID = 1',
+          'FROM ' +
+          SALES +
+          ' WHERE ID = 1',
       );
       expect(resultado).toHaveLength(1);
       expect(Number(resultado[0]?.ANIO)).toBe(2024);
@@ -272,7 +318,7 @@ describe.skipIf(!optIn)('el SQL de Oracle por el MCP, a fondo', () => {
 
     it('el filtro por rango de fechas con binds funciona', async () => {
       const resultado = await rows(
-        'SELECT ID FROM ' + SALES + ' WHERE SOLD_AT >= DATE \'2024-02-01\' ORDER BY ID',
+        'SELECT ID FROM ' + SALES + " WHERE SOLD_AT >= DATE '2024-02-01' ORDER BY ID",
       );
       expect(resultado.map((r) => Number(r.ID))).toEqual([2, 4, 5, 6]);
     });
@@ -283,7 +329,9 @@ describe.skipIf(!optIn)('el SQL de Oracle por el MCP, a fondo', () => {
       const resultado = await rows(
         "SELECT CASE WHEN ID = 1 THEN 'uno' ELSE 'otro' END AS CASO, " +
           "DECODE(REGION, 'N', 'norte', 'sur') AS DEC, " +
-          'COALESCE(AMT, 0) AS COA, NULLIF(AMT, 10) AS NULO FROM ' + SALES + ' WHERE ID = 1',
+          'COALESCE(AMT, 0) AS COA, NULLIF(AMT, 10) AS NULO FROM ' +
+          SALES +
+          ' WHERE ID = 1',
       );
       expect(resultado[0]?.CASO).toBe('uno');
       expect(resultado[0]?.DEC).toBe('norte');
@@ -319,7 +367,7 @@ describe.skipIf(!optIn)('el SQL de Oracle por el MCP, a fondo', () => {
     });
 
     it('una vista materializada se refresca y se lee', async () => {
-      await db.execute("INSERT INTO " + MVB + " VALUES (3, 'c')");
+      await db.execute('INSERT INTO ' + MVB + " VALUES (3, 'c')");
       await db.execute("BEGIN DBMS_MVIEW.REFRESH('" + MV + "'); END;");
 
       const resultado = await rows('SELECT ID, TXT FROM ' + MV + ' ORDER BY ID');

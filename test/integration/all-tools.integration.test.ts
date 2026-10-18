@@ -78,11 +78,14 @@ const MATRIX: Case[] = [
   { name: 'run_query', args: { sql: 'SELECT COUNT(*) AS N FROM DUAL' } },
   { name: 'get_sample_data', args: { table: TABLE, rows: 2 } },
 
-  { name: 'execute_dml', args: { sql: "INSERT INTO " + TABLE + " (ID, TXT) VALUES (901, 'dml')" } },
-  { name: 'execute_dml_preview', args: { sql: "UPDATE " + TABLE + " SET TXT = 'preview' WHERE ID = 1" } },
+  { name: 'execute_dml', args: { sql: 'INSERT INTO ' + TABLE + " (ID, TXT) VALUES (901, 'dml')" } },
+  {
+    name: 'execute_dml_preview',
+    args: { sql: 'UPDATE ' + TABLE + " SET TXT = 'preview' WHERE ID = 1" },
+  },
   {
     name: 'execute_dml_rollback_first',
-    args: { sql: "INSERT INTO " + TABLE + " (ID, TXT) VALUES (903, 'dml')" },
+    args: { sql: 'INSERT INTO ' + TABLE + " (ID, TXT) VALUES (903, 'dml')" },
   },
 
   { name: 'comment_on_table', args: { table: TABLE, comment: 'T91_IT' } },
@@ -90,7 +93,10 @@ const MATRIX: Case[] = [
   { name: 'create_or_replace_view', args: { view: VIEW, selectBody: SELECT_SQL } },
   { name: 'create_synonym', args: { synonym: SYN, targetSchema: OWNER, targetName: TABLE } },
   { name: 'create_sequence', args: { sequence: SEQ } },
-  { name: 'create_index', args: { index: IDX, tableSchema: OWNER, table: TABLE, columns: ['TXT'] } },
+  {
+    name: 'create_index',
+    args: { index: IDX, tableSchema: OWNER, table: TABLE, columns: ['TXT'] },
+  },
   { name: 'create_mview_log', args: { table: MV, withPrimaryKey: true } },
 
   { name: 'list_schemas' },
@@ -190,21 +196,27 @@ describe.skipIf(!optIn)('las 75 Tools contra Oracle real', () => {
     await db.execute('CREATE TABLE ' + TABLE + ' (ID NUMBER PRIMARY KEY, TXT VARCHAR2(50))');
     await db.execute('CREATE TABLE ' + CHILD + ' (ID NUMBER PRIMARY KEY, PARENT_ID NUMBER)');
     await db.execute(
-      'ALTER TABLE ' + CHILD + ' ADD CONSTRAINT FK_' + CHILD + ' FOREIGN KEY (PARENT_ID) REFERENCES ' + TABLE + '(ID)',
+      'ALTER TABLE ' +
+        CHILD +
+        ' ADD CONSTRAINT FK_' +
+        CHILD +
+        ' FOREIGN KEY (PARENT_ID) REFERENCES ' +
+        TABLE +
+        '(ID)',
     );
     await db.execute(
-      "INSERT INTO " + TABLE + " (ID, TXT) SELECT LEVEL, 'txt' || LEVEL FROM DUAL CONNECT BY LEVEL <= 10",
+      'INSERT INTO ' +
+        TABLE +
+        " (ID, TXT) SELECT LEVEL, 'txt' || LEVEL FROM DUAL CONNECT BY LEVEL <= 10",
     );
+    await db.execute('CREATE MATERIALIZED VIEW ' + MV + ' AS SELECT ID, TXT FROM ' + TABLE);
     await db.execute(
-      'CREATE MATERIALIZED VIEW ' + MV + ' AS SELECT ID, TXT FROM ' + TABLE,
-    );
-    await db.execute(
-      'CREATE OR REPLACE PROCEDURE ' + PROC + ' (P_ID IN NUMBER, OUT_MSG OUT VARCHAR2) AS' +
+      'CREATE OR REPLACE PROCEDURE ' +
+        PROC +
+        ' (P_ID IN NUMBER, OUT_MSG OUT VARCHAR2) AS' +
         " BEGIN OUT_MSG := 'ok ' || P_ID; END;",
     );
-    await db.execute(
-      'BEGIN DBMS_STATS.GATHER_TABLE_STATS(USER, ' + "'" + TABLE + "'" + '); END;',
-    );
+    await db.execute('BEGIN DBMS_STATS.GATHER_TABLE_STATS(USER, ' + "'" + TABLE + "'" + '); END;');
   }, 120_000);
 
   afterAll(async () => {
@@ -253,7 +265,10 @@ describe.skipIf(!optIn)('las 75 Tools contra Oracle real', () => {
     const row = sesion.rows[0];
     expect(row).toBeDefined();
 
-    const resultado = await call('get_session_sql_text', { sid: row!.SID, serialNum: row!['SERIAL#'] });
+    const resultado = await call('get_session_sql_text', {
+      sid: row!.SID,
+      serialNum: row!['SERIAL#'],
+    });
     expect(resultado.isError).toBeFalsy();
   });
 

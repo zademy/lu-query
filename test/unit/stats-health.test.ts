@@ -462,7 +462,12 @@ describe('oracle_mcp_health_report', () => {
       });
       try {
         // Una sentencia real por la API del writer: deja la sesión en disco.
-        await auditStatement(harness.audit, 'SELECT 1 FROM dual', () => Promise.resolve({}), () => 0);
+        await auditStatement(
+          harness.audit,
+          'SELECT 1 FROM dual',
+          () => Promise.resolve({}),
+          () => 0,
+        );
 
         const result = (await harness.client.callTool({
           name: 'oracle_mcp_health_report',
@@ -487,7 +492,12 @@ describe('oracle_mcp_health_report', () => {
       });
       try {
         // La sentencia se apaga sola por I/O: auditStatement nunca lanza.
-        await auditStatement(harness.audit, 'SELECT 1 FROM dual', () => Promise.resolve({}), () => 0);
+        await auditStatement(
+          harness.audit,
+          'SELECT 1 FROM dual',
+          () => Promise.resolve({}),
+          () => 0,
+        );
 
         const result = (await harness.client.callTool({
           name: 'oracle_mcp_health_report',

@@ -63,29 +63,39 @@ describe.skipIf(!optIn)('SQL avanzado contra Oracle real', () => {
     client = new Client({ name: 'lu-query-advanced-integration', version: '0.0.0' });
     await Promise.all([handle.server.connect(serverTransport), client.connect(clientTransport)]);
 
-    await db.execute('CREATE TABLE ' + DEPT + ' (DEPT_ID NUMBER PRIMARY KEY, DEPT_NAME VARCHAR2(30))');
     await db.execute(
-      'CREATE TABLE ' + EMP + ' (EMP_ID NUMBER PRIMARY KEY, EMP_NAME VARCHAR2(30), DEPT_ID NUMBER, SALARY NUMBER)',
+      'CREATE TABLE ' + DEPT + ' (DEPT_ID NUMBER PRIMARY KEY, DEPT_NAME VARCHAR2(30))',
     );
     await db.execute(
-      'CREATE TABLE ' + PROJ + ' (PROJ_ID NUMBER PRIMARY KEY, EMP_ID NUMBER, PROJ_NAME VARCHAR2(30))',
+      'CREATE TABLE ' +
+        EMP +
+        ' (EMP_ID NUMBER PRIMARY KEY, EMP_NAME VARCHAR2(30), DEPT_ID NUMBER, SALARY NUMBER)',
+    );
+    await db.execute(
+      'CREATE TABLE ' +
+        PROJ +
+        ' (PROJ_ID NUMBER PRIMARY KEY, EMP_ID NUMBER, PROJ_NAME VARCHAR2(30))',
     );
     // 3 departamentos, 4 con empleados, 1 sin ninguno.
     await db.execute(
-      "INSERT INTO " + DEPT + " SELECT LEVEL, 'dept' || LEVEL FROM DUAL CONNECT BY LEVEL <= 3",
+      'INSERT INTO ' + DEPT + " SELECT LEVEL, 'dept' || LEVEL FROM DUAL CONNECT BY LEVEL <= 3",
     );
     // 5 empleados: 4 con departamento (uno sin proyectos) y 1 sin departamento.
     // 5 empleados: 2 en dept1, 2 en dept2 y 1 sin departamento.
     await db.execute(
-      "INSERT INTO " + EMP + " (EMP_ID, EMP_NAME, DEPT_ID, SALARY) SELECT LEVEL, 'emp' || LEVEL," +
-        " CASE WHEN LEVEL <= 2 THEN 1 WHEN LEVEL <= 4 THEN 2 ELSE NULL END," +
-        " CASE WHEN LEVEL = 3 THEN NULL ELSE LEVEL * 100 END" +
-        " FROM DUAL CONNECT BY LEVEL <= 5",
+      'INSERT INTO ' +
+        EMP +
+        " (EMP_ID, EMP_NAME, DEPT_ID, SALARY) SELECT LEVEL, 'emp' || LEVEL," +
+        ' CASE WHEN LEVEL <= 2 THEN 1 WHEN LEVEL <= 4 THEN 2 ELSE NULL END,' +
+        ' CASE WHEN LEVEL = 3 THEN NULL ELSE LEVEL * 100 END' +
+        ' FROM DUAL CONNECT BY LEVEL <= 5',
     );
     // 3 proyectos: 2 del empleado 1 y 1 del empleado 2.
     await db.execute(
-      "INSERT INTO " + PROJ + " SELECT LEVEL, CASE WHEN LEVEL <= 2 THEN 1 ELSE 2 END, 'proj' || LEVEL" +
-        " FROM DUAL CONNECT BY LEVEL <= 3",
+      'INSERT INTO ' +
+        PROJ +
+        " SELECT LEVEL, CASE WHEN LEVEL <= 2 THEN 1 ELSE 2 END, 'proj' || LEVEL" +
+        ' FROM DUAL CONNECT BY LEVEL <= 3',
     );
   }, 120_000);
 
@@ -107,13 +117,18 @@ describe.skipIf(!optIn)('SQL avanzado contra Oracle real', () => {
 
   const query = async (sql: string, extra: Record<string, unknown> = {}): Promise<QueryResult> => {
     const resultado = await call('run_query', { sql, ...extra });
-    if (resultado.isError) throw new Error(sql + ' => ' + (resultado.content[0]?.text ?? 'sin texto'));
+    if (resultado.isError)
+      throw new Error(sql + ' => ' + (resultado.content[0]?.text ?? 'sin texto'));
     return JSON.parse(resultado.content[0]?.text ?? '{}') as QueryResult;
   };
 
   it('INNER JOIN devuelve solo las filas que emparejan', async () => {
     const resultado = await query(
-      'SELECT e.EMP_ID, d.DEPT_NAME FROM ' + EMP + ' e INNER JOIN ' + DEPT + ' d ON e.DEPT_ID = d.DEPT_ID' +
+      'SELECT e.EMP_ID, d.DEPT_NAME FROM ' +
+        EMP +
+        ' e INNER JOIN ' +
+        DEPT +
+        ' d ON e.DEPT_ID = d.DEPT_ID' +
         ' ORDER BY e.EMP_ID',
     );
     expect(resultado.rowCount).toBe(4);
@@ -124,7 +139,10 @@ describe.skipIf(!optIn)('SQL avanzado contra Oracle real', () => {
 
   it('LEFT OUTER JOIN conserva el empleado sin departamento', async () => {
     const resultado = await query(
-      'SELECT e.EMP_ID, d.DEPT_NAME FROM ' + EMP + ' e LEFT OUTER JOIN ' + DEPT +
+      'SELECT e.EMP_ID, d.DEPT_NAME FROM ' +
+        EMP +
+        ' e LEFT OUTER JOIN ' +
+        DEPT +
         ' d ON e.DEPT_ID = d.DEPT_ID ORDER BY e.EMP_ID',
     );
     expect(resultado.rowCount).toBe(5);
@@ -137,7 +155,10 @@ describe.skipIf(!optIn)('SQL avanzado contra Oracle real', () => {
     // RIGHT conserva la tabla derecha: con DEPT a la izquierda, se quedan los
     // 5 empleados y el departamento sin empleados se pierde.
     const empleados = await query(
-      'SELECT d.DEPT_ID, e.EMP_ID FROM ' + DEPT + ' d RIGHT OUTER JOIN ' + EMP +
+      'SELECT d.DEPT_ID, e.EMP_ID FROM ' +
+        DEPT +
+        ' d RIGHT OUTER JOIN ' +
+        EMP +
         ' e ON e.DEPT_ID = d.DEPT_ID ORDER BY d.DEPT_ID',
     );
     expect(empleados.rowCount).toBe(5);
@@ -146,7 +167,10 @@ describe.skipIf(!optIn)('SQL avanzado contra Oracle real', () => {
     // emparejados + el departamento sin ellos. El empleado sin departamento se
     // pierde, porque RIGHT solo conserva las filas sin pareja de la derecha.
     const departamentos = await query(
-      'SELECT e.EMP_ID, d.DEPT_ID FROM ' + EMP + ' e RIGHT OUTER JOIN ' + DEPT +
+      'SELECT e.EMP_ID, d.DEPT_ID FROM ' +
+        EMP +
+        ' e RIGHT OUTER JOIN ' +
+        DEPT +
         ' d ON e.DEPT_ID = d.DEPT_ID ORDER BY d.DEPT_ID',
     );
     expect(departamentos.rowCount).toBe(5);
@@ -156,7 +180,10 @@ describe.skipIf(!optIn)('SQL avanzado contra Oracle real', () => {
 
   it('FULL OUTER JOIN conserva los dos lados', async () => {
     const resultado = await query(
-      'SELECT d.DEPT_ID, e.EMP_ID FROM ' + DEPT + ' d FULL OUTER JOIN ' + EMP +
+      'SELECT d.DEPT_ID, e.EMP_ID FROM ' +
+        DEPT +
+        ' d FULL OUTER JOIN ' +
+        EMP +
         ' e ON e.DEPT_ID = d.DEPT_ID',
     );
     // 4 emparejados + 1 empleado sin depto + 1 depto sin empleados.
@@ -172,9 +199,15 @@ describe.skipIf(!optIn)('SQL avanzado contra Oracle real', () => {
 
   it('join de tres tablas con GROUP BY, HAVING y ORDER BY', async () => {
     const resultado = await query(
-      'SELECT d.DEPT_NAME, COUNT(p.PROJ_ID) AS PROYECTOS FROM ' + DEPT + ' d' +
-        ' JOIN ' + EMP + ' e ON e.DEPT_ID = d.DEPT_ID' +
-        ' LEFT JOIN ' + PROJ + ' p ON p.EMP_ID = e.EMP_ID' +
+      'SELECT d.DEPT_NAME, COUNT(p.PROJ_ID) AS PROYECTOS FROM ' +
+        DEPT +
+        ' d' +
+        ' JOIN ' +
+        EMP +
+        ' e ON e.DEPT_ID = d.DEPT_ID' +
+        ' LEFT JOIN ' +
+        PROJ +
+        ' p ON p.EMP_ID = e.EMP_ID' +
         ' GROUP BY d.DEPT_NAME HAVING COUNT(p.PROJ_ID) > 0 ORDER BY d.DEPT_NAME',
     );
     // Solo dept1 tiene proyectos: 2 del empleado 1 y 1 del empleado 2.
@@ -185,7 +218,10 @@ describe.skipIf(!optIn)('SQL avanzado contra Oracle real', () => {
 
   it('INNER JOIN con subquery correlacionado', async () => {
     const resultado = await query(
-      'SELECT e.EMP_ID FROM ' + EMP + ' e WHERE e.DEPT_ID IN (SELECT d.DEPT_ID FROM ' + DEPT +
+      'SELECT e.EMP_ID FROM ' +
+        EMP +
+        ' e WHERE e.DEPT_ID IN (SELECT d.DEPT_ID FROM ' +
+        DEPT +
         " d WHERE d.DEPT_NAME = 'dept1') ORDER BY e.EMP_ID",
     );
     expect(resultado.rowCount).toBe(2);
@@ -195,7 +231,11 @@ describe.skipIf(!optIn)('SQL avanzado contra Oracle real', () => {
   it.each([
     ['UNION ALL', 'SELECT EMP_ID FROM ' + EMP + ' UNION ALL SELECT EMP_ID FROM ' + EMP, 10],
     ['UNION', 'SELECT EMP_ID FROM ' + EMP + ' UNION SELECT EMP_ID FROM ' + EMP, 5],
-    ['MINUS', 'SELECT EMP_ID FROM ' + EMP + ' MINUS SELECT EMP_ID FROM ' + EMP + ' WHERE EMP_ID > 2', 2],
+    [
+      'MINUS',
+      'SELECT EMP_ID FROM ' + EMP + ' MINUS SELECT EMP_ID FROM ' + EMP + ' WHERE EMP_ID > 2',
+      2,
+    ],
     [
       'INTERSECT',
       'SELECT EMP_ID FROM ' + EMP + ' INTERSECT SELECT EMP_ID FROM ' + EMP + ' WHERE EMP_ID <= 2',
@@ -208,7 +248,9 @@ describe.skipIf(!optIn)('SQL avanzado contra Oracle real', () => {
   it('window function con PARTITION BY', async () => {
     const resultado = await query(
       'SELECT EMP_ID, DEPT_ID, ROW_NUMBER() OVER (PARTITION BY DEPT_ID ORDER BY SALARY DESC) AS RN' +
-        ' FROM ' + EMP + ' ORDER BY EMP_ID',
+        ' FROM ' +
+        EMP +
+        ' ORDER BY EMP_ID',
     );
     expect(resultado.rowCount).toBe(5);
     expect(resultado.columns).toContain('RN');
@@ -216,7 +258,9 @@ describe.skipIf(!optIn)('SQL avanzado contra Oracle real', () => {
 
   it('CTE con WITH', async () => {
     const resultado = await query(
-      'WITH PAGADOS AS (SELECT EMP_ID, SALARY FROM ' + EMP + ' WHERE SALARY IS NOT NULL)' +
+      'WITH PAGADOS AS (SELECT EMP_ID, SALARY FROM ' +
+        EMP +
+        ' WHERE SALARY IS NOT NULL)' +
         ' SELECT COUNT(*) AS N FROM PAGADOS',
     );
     expect(resultado.rowCount).toBe(1);
@@ -224,16 +268,17 @@ describe.skipIf(!optIn)('SQL avanzado contra Oracle real', () => {
   });
 
   it('acepta hints de Oracle, incluido el de paralelismo', async () => {
-    const resultado = await query(
-      'SELECT /*+ PARALLEL(4) */ COUNT(*) AS N FROM ' + EMP,
-    );
+    const resultado = await query('SELECT /*+ PARALLEL(4) */ COUNT(*) AS N FROM ' + EMP);
     expect(resultado.rowCount).toBe(1);
     expect(Number(resultado.rows[0]?.N)).toBe(5);
   });
 
   it('la paginacion reescribe el join sin romperlo', async () => {
     const sql =
-      'SELECT e.EMP_ID, d.DEPT_NAME FROM ' + EMP + ' e JOIN ' + DEPT +
+      'SELECT e.EMP_ID, d.DEPT_NAME FROM ' +
+      EMP +
+      ' e JOIN ' +
+      DEPT +
       ' d ON e.DEPT_ID = d.DEPT_ID ORDER BY e.EMP_ID';
     const primera = await query(sql, { offset: 0, limit: 2 });
     const segunda = await query(sql, { offset: 2, limit: 2 });
@@ -246,7 +291,9 @@ describe.skipIf(!optIn)('SQL avanzado contra Oracle real', () => {
   });
 
   it('la auditoria clasifica el join como SELECT de lectura', async () => {
-    await query('SELECT e.EMP_ID FROM ' + EMP + ' e LEFT JOIN ' + DEPT + ' d ON e.DEPT_ID = d.DEPT_ID');
+    await query(
+      'SELECT e.EMP_ID FROM ' + EMP + ' e LEFT JOIN ' + DEPT + ' d ON e.DEPT_ID = d.DEPT_ID',
+    );
     const [file] = await readdir(auditDir);
     const markdown = await readFile(join(auditDir, file!), 'utf8');
 
@@ -257,8 +304,12 @@ describe.skipIf(!optIn)('SQL avanzado contra Oracle real', () => {
   it('un UPDATE con subquery se aplica y queda confirmado', async () => {
     const dml = await call('execute_dml', {
       sql:
-        'UPDATE ' + EMP + ' e SET e.SALARY = 777 WHERE e.DEPT_ID IN' +
-        ' (SELECT d.DEPT_ID FROM ' + DEPT + " d WHERE d.DEPT_NAME = 'dept1')",
+        'UPDATE ' +
+        EMP +
+        ' e SET e.SALARY = 777 WHERE e.DEPT_ID IN' +
+        ' (SELECT d.DEPT_ID FROM ' +
+        DEPT +
+        " d WHERE d.DEPT_NAME = 'dept1')",
     });
     expect(dml.isError).toBeFalsy();
 
@@ -271,7 +322,10 @@ describe.skipIf(!optIn)('SQL avanzado contra Oracle real', () => {
   it('el preview de DML clasifica UPDATE y DELETE con subquery', async () => {
     const update = await call('execute_dml_preview', {
       sql:
-        'UPDATE ' + EMP + ' e SET e.SALARY = 1 WHERE EXISTS (SELECT 1 FROM ' + DEPT +
+        'UPDATE ' +
+        EMP +
+        ' e SET e.SALARY = 1 WHERE EXISTS (SELECT 1 FROM ' +
+        DEPT +
         ' d WHERE d.DEPT_ID = e.DEPT_ID)',
     });
     expect(update.isError).toBeFalsy();
@@ -279,7 +333,10 @@ describe.skipIf(!optIn)('SQL avanzado contra Oracle real', () => {
 
     const delete_ = await call('execute_dml_preview', {
       sql:
-        'DELETE FROM ' + EMP + ' WHERE EMP_ID IN (SELECT EMP_ID FROM ' + EMP +
+        'DELETE FROM ' +
+        EMP +
+        ' WHERE EMP_ID IN (SELECT EMP_ID FROM ' +
+        EMP +
         ' WHERE SALARY IS NULL)',
     });
     expect(delete_.isError).toBeFalsy();
@@ -289,7 +346,9 @@ describe.skipIf(!optIn)('SQL avanzado contra Oracle real', () => {
   it('MERGE y INSERT...SELECT se ejecutan y se revierten', async () => {
     const merge = await call('execute_dml_rollback_first', {
       sql:
-        'MERGE INTO ' + EMP + ' t USING (SELECT 1 AS EMP_ID FROM DUAL) s' +
+        'MERGE INTO ' +
+        EMP +
+        ' t USING (SELECT 1 AS EMP_ID FROM DUAL) s' +
         ' ON (t.EMP_ID = s.EMP_ID) WHEN MATCHED THEN UPDATE SET t.SALARY = 0',
     });
     expect(merge.isError).toBeFalsy();

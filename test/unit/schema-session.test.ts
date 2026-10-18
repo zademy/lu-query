@@ -5,7 +5,10 @@ import { createHarness } from '../helpers/harness.js';
 /** La sesión responde HR cuando la tool no trae schema ni ORACLE_DB_SCHEMA. */
 function conSesionHR(): FakeDataAccess {
   return new FakeDataAccess()
-    .on((call) => call.sql.includes('SYS_CONTEXT'), () => ({ rows: [{ CURRENT_SCHEMA: 'HR' }] }))
+    .on(
+      (call) => call.sql.includes('SYS_CONTEXT'),
+      () => ({ rows: [{ CURRENT_SCHEMA: 'HR' }] }),
+    )
     .always(() => ({ rows: [] }));
 }
 

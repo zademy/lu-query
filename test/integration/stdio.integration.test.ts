@@ -46,9 +46,7 @@ const spawnServer = async (
     command: 'node',
     args: [ENTRY],
     env: Object.fromEntries(
-      Object.entries({ ...process.env, ...GOOD_ENV, ...env }).filter(
-        (par) => par[1] !== undefined,
-      ),
+      Object.entries({ ...process.env, ...GOOD_ENV, ...env }).filter((par) => par[1] !== undefined),
     ) as Record<string, string>,
     stderr: 'pipe',
   });
@@ -177,9 +175,7 @@ describe.skipIf(!optIn)('el MCP sobre stdio real, en un proceso hijo', () => {
 
   it('el proceso sale con codigo 0 cuando el cliente cierra', async () => {
     const { client, transport } = await spawnServer();
-    const proceso = (
-      transport as unknown as { _process?: { exitCode: number | null } }
-    )._process;
+    const proceso = (transport as unknown as { _process?: { exitCode: number | null } })._process;
     expect(proceso).toBeDefined();
 
     await client.close();

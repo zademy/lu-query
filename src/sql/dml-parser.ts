@@ -190,4 +190,3 @@ function literalizeBinds(text: string): string {
 function isWordChar(ch: string | undefined): boolean {
   return ch !== undefined && /[A-Za-z0-9_$#]/.test(ch);
 }
-

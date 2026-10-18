@@ -55,7 +55,11 @@ describe.skipIf(!optIn)('tope de filas del chokepoint contra Oracle real', () =>
     // Oracle admite varios CHECK sobre la misma columna si el nombre cambia.
     for (let i = 0; i < CONSTRAINT_COUNT; i++) {
       await db.execute(
-        'ALTER TABLE ' + TABLE + ' ADD CONSTRAINT ' + constraintName(i) + ' CHECK (TXT IS NOT NULL)',
+        'ALTER TABLE ' +
+          TABLE +
+          ' ADD CONSTRAINT ' +
+          constraintName(i) +
+          ' CHECK (TXT IS NOT NULL)',
       );
     }
   }, 180_000);
@@ -70,9 +74,12 @@ describe.skipIf(!optIn)('tope de filas del chokepoint contra Oracle real', () =>
   const call = async (name: string, args: Record<string, unknown>): Promise<ToolResult> =>
     (await client.callTool({ name, arguments: args })) as ToolResult;
 
-  const rows = async (name: string, args: Record<string, unknown>): Promise<Record<string, unknown>[]> => {
+  const rows = async (
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<Record<string, unknown>[]> => {
     const resultado = await call(name, args);
-    if (resultado.isError) throw new Error(resultado.content[0]?.text ?? "sin texto");
+    if (resultado.isError) throw new Error(resultado.content[0]?.text ?? 'sin texto');
     return JSON.parse(resultado.content[0]?.text ?? '[]') as Record<string, unknown>[];
   };
 
