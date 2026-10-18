@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reporte de benchmark · lu-query</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style type="text/tailwindcss">
+      @theme static {
+        --color-bg: #0b0d11;
+        --color-surface: #12151b;
+        --color-line: #232833;
+        --color-ink: #eef1f6;
+        --color-muted: #8b93a3;
+        --color-faint: #798195;
+        --color-antes: #f0524b;
+        --color-despues: #5ee0d0;
+        --color-aviso: #f5c451;
+        --font-sans: -apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+        --font-mono: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+      }
+    </style>
+    <style>
+      /*
+       * Fondo liso a proposito. Una rejilla detras de un grafico compite con la
+       * reticula del grafico y vuelve ilegible la escala. Ver DESIGN.md.
+       */
+      body {
+        background-color: var(--color-bg);
+        color: var(--color-ink);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+      }
+      .mono {
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+      }
+      details > summary {
+        cursor: pointer;
+        list-style: none;
+      }
+      details > summary::-webkit-details-marker {
+        display: none;
+      }
+      details > summary::before {
+        content: '▸';
+        display: inline-block;
+        width: 1em;
+        color: var(--color-faint);
+      }
+      details[open] > summary::before {
+        content: '▾';
+      }
+      summary:focus-visible,
+      button:focus-visible,
+      select:focus-visible {
+        outline: 2px solid var(--color-despues);
+        outline-offset: 2px;
+      }
+      pre {
+        font-family: var(--font-mono);
+        overflow-x: auto;
+        tab-size: 2;
+      }
+      .overflow-x-scroll {
+        overflow-x: auto;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  </head>
+
+  <body>
+    <main class="mx-auto max-w-6xl px-6 py-10">
+      <header class="mb-6 border-b border-line pb-4">
+        <h1 class="text-lg" data-el="query-name"></h1>
+        <p class="mt-1 text-sm text-muted">
+          Antes y después · reproducción de mediciones registradas
+        </p>
+      </header>
+      <div class="grid gap-6">
+        <section aria-labelledby="h-comparativa" class="min-w-0">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 id="h-comparativa" class="text-lg">Comparación de rendimiento</h2>
+            <button
+              id="replay"
+              type="button"
+              class="rounded border border-line px-4 py-2 text-sm"
+              disabled
+            >
+              Reproducir
+            </button>
+          </div>
+          <label class="mt-4 block text-sm text-muted"
+            >Métrica
+            <select
+              id="metric"
+              class="ml-2 rounded border border-line bg-surface px-3 py-2 text-ink"
+            >
+              <option value="ms">Duración (ms)</option>
+              <option value="buffers">Buffers lógicos</option>
+              <option value="reads">Lecturas físicas</option>
+            </select>
+          </label>
+          <p class="mt-3 text-xs text-muted" data-el="comparativa-nota"></p>
+          <div style="position: relative; height: 380px" class="mt-4">
+            <canvas
+              id="chart-main"
+              role="img"
+              aria-label="Antes y después por repetición. Valores completos en la tabla inferior."
+            ></canvas>
+          </div>
+          <div class="mt-4 flex gap-6 border-t border-line pt-3 text-sm">
+            <span style="color: #f0524b">━ Antes</span><span style="color: #5ee0d0">━ Después</span>
+          </div>
+          <p class="mt-2 text-xs text-faint" data-el="leyenda-calentamiento"></p>
+          <section class="mt-6 border-t border-line pt-4" aria-label="Tablas con mayor carga">
+            <h3 class="text-lg">Dónde se concentra el trabajo</h3>
+            <p class="mt-2 text-sm text-muted">
+              Accesos a tablas del plan guardado, ordenados por la métrica elegida. Tiempos
+              inclusivos, no sumables; no representan una cronología ni identifican la causa de un
+              pico entre repeticiones.
+            </p>
+            <div id="table-hotspots" class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3"></div>
+            <p
+              id="operation-detail"
+              class="mt-4 break-words text-sm text-aviso"
+              aria-live="polite"
+            ></p>
+          </section>
+        </section>
+        <aside class="border-t border-line pt-6" aria-label="Resumen de la comparación">
+          <h2 class="text-sm text-muted">Resultado de la prueba</h2>
+          <p class="mono mt-5 text-5xl" data-el="factor"></p>
+          <p class="mt-3 text-sm leading-relaxed text-muted" data-el="factor-basis"></p>
+          <dl class="mt-6 space-y-6 border-t border-line pt-6">
+            <div>
+              <dt class="text-xs text-muted">Integridad del resultado</dt>
+              <dd class="mt-2 text-xl" data-el="huella"></dd>
+              <dd class="mono mt-2 break-words text-xs text-faint" data-el="huella-detalle"></dd>
+            </div>
+            <div>
+              <dt class="text-xs text-muted">Filas comparadas</dt>
+              <dd class="mono mt-2 text-2xl" data-el="filas"></dd>
+              <dd class="mt-2 text-xs text-faint" data-el="filas-detalle"></dd>
+            </div>
+          </dl>
+        </aside>
+      </div>
+
+      <!-- Evidencia cruda. -->
+      <section aria-labelledby="h-medidas" class="mt-14">
+        <h2 id="h-medidas" class="text-lg">Cada medicion</h2>
+        <p class="mt-1 text-sm text-muted">
+          Las dos primeras repeticiones son calentamiento y quedan fuera de la mediana.
+        </p>
+        <div class="overflow-x-scroll mt-6">
+          <table class="mono w-full min-w-[34rem] border-collapse text-sm">
+            <caption class="sr-only">
+              Duracion, buffers y lecturas por repeticion
+            </caption>
+            <thead>
+              <tr class="border-b border-line text-left text-xs text-muted">
+                <th scope="col" class="py-2 pr-6 font-normal">Repeticion</th>
+                <th scope="col" class="py-2 pr-6 text-right font-normal">Antes (ms)</th>
+                <th scope="col" class="py-2 pr-6 text-right font-normal">Despues (ms)</th>
+                <th scope="col" class="py-2 pr-6 text-right font-normal">Antes (buffers)</th>
+                <th scope="col" class="py-2 pr-6 text-right font-normal">Despues (buffers)</th>
+                <th scope="col" class="py-2 text-right font-normal">Antes (lecturas)</th>
+                <th scope="col" class="py-2 text-right font-normal">Despues (lecturas)</th>
+              </tr>
+            </thead>
+            <tbody data-el="tabla-medidas"></tbody>
+          </table>
+        </div>
+      </section>
+      <section aria-labelledby="h-avisos" class="mt-10 bg-surface p-5" data-block="avisos" hidden>
+        <h2 id="h-avisos" class="text-sm text-aviso">Alcance de la medición</h2>
+        <ul class="mt-3 space-y-2 text-sm text-muted" data-el="avisos"></ul>
+      </section>
+      <section aria-labelledby="h-cuellos" class="mt-10" data-block="cuellos" hidden>
+        <h2 id="h-cuellos" class="text-lg">Cuellos de botella</h2>
+        <ul class="mt-4 divide-y divide-line border-y border-line" data-el="cuellos"></ul>
+      </section>
+
+      <!-- Sentencias y planes: se abren solo si hacen falta. -->
+      <section aria-labelledby="h-sql" class="mt-14">
+        <h2 id="h-sql" class="text-lg">Sentencias y planes</h2>
+        <div class="mt-6 space-y-2" data-el="detalles"></div>
+      </section>
+
+      <section aria-labelledby="h-indices" class="mt-10">
+        <h2 id="h-indices" class="text-lg">Índices: caminos para encontrar los datos</h2>
+        <p class="mt-2 text-sm text-muted">
+          Un índice es como la lista de páginas de un libro. Ayuda a encontrar algo sin leer cada
+          página. Si necesitas casi todo el libro, leerlo seguido puede ser más rápido.
+        </p>
+        <p class="mt-2 text-sm text-muted">
+          Las propuestas se prueban antes de aceptarlas. Este reporte no crea ni borra índices.
+        </p>
+        <div id="index-advice" class="mt-4 space-y-4"></div>
+      </section>
+      <!-- Errores: nunca tragados. -->
+      <section
+        aria-labelledby="h-errores"
+        class="mt-14 border-l-2 border-antes bg-surface px-5 py-4"
+        data-block="errores"
+        hidden
+      >
+        <h2 id="h-errores" class="text-sm text-antes">Pasos que fallaron</h2>
+        <ul class="mono mt-2.5 space-y-2 text-xs" data-el="errores"></ul>
+      </section>
+
+      <footer class="mt-16 border-t border-line pt-6">
+        <p class="text-sm text-muted">
+          Generado por la skill <code class="mono">lu-query-benchmark-sql</code>. El reporte guarda
+          literales del SQL medido: es un documento interno, no lo publiques sin revisarlo.
+        </p>
+        <p class="mono mt-2 text-xs text-faint" data-el="provenance"></p>
+      </footer>
+    </main>
+
+    <!--lu-data-->
+
+    <script>
+      const data = JSON.parse(document.getElementById('lu-data').textContent);
+      const el = (name, root = document) => root.querySelector(`[data-el="${name}"]`);
+
+      const SIN_DATO = 'no medido';
+      const COLORES = { antes: '#f0524b', despues: '#5ee0d0', aviso: '#f5c451' };
+
+      // Todo numero del reporte viene de una medicion. Si no existe, se dice.
+      const num = (v) => (v === null || v === undefined ? SIN_DATO : v.toLocaleString('es-MX'));
+      const dec = (v, d = 1) =>
+        v === null || v === undefined
+          ? SIN_DATO
+          : v.toLocaleString('es-MX', {
+              minimumFractionDigits: d,
+              maximumFractionDigits: d,
+            });
+      const ms = (v) => {
+        if (v === null || v === undefined) return SIN_DATO;
+        return v >= 1000
+          ? `${(v / 1000).toLocaleString('es-MX', { maximumFractionDigits: 2 })} s`
+          : `${num(v)} ms`;
+      };
+
+      const set = (name, value, node) => {
+        const target = node || el(name);
+        if (target) target.textContent = value;
+      };
+      const show = (name, visible) => {
+        const block = el(name) && el(name).closest('[data-block]');
+        if (block) block.hidden = !visible;
+      };
+
+      // --- Veredicto -------------------------------------------------------
+      const meta = data.meta || {};
+      set('query-name', meta.queryName || 'sentencia sin nombre');
+      document.title = `Benchmark · ${meta.queryName || 'SQL'}`;
+
+      const antes = data.original || null;
+      const despues = data.optimized || null;
+      const warmup = meta.warmup || 0;
+
+      // El factor lo calcula el script, no el navegador: un redondeo hecho aqui se
+      // leeria igual que un redondeo mal hecho a mano por el agente (ADR 0005).
+      const factor = data.factorMs;
+      if (antes && despues && factor) {
+        const target = el('factor');
+        target.textContent = `${factor.toLocaleString('es-MX', { maximumFractionDigits: 2 })}×`;
+        target.classList.add(factor > 1 ? 'text-despues' : 'text-antes');
+        set(
+          'factor-basis',
+          `${ms(antes.medianMs)} contra ${ms(despues.medianMs)}, mediana de ${meta.measured || 0} ` +
+            `repeticiones por version tras ${warmup} de calentamiento. Una vez es ruido: ` +
+            `mira las tres ultimas lineas de la tabla de abajo.`,
+        );
+      } else {
+        set('factor', SIN_DATO, el('factor'));
+        el('factor').classList.remove('text-despues', 'text-antes');
+        el('factor').classList.add('text-faint');
+        set('factor-basis', 'No hubo dos versiones medibles para comparar.');
+      }
+
+      const huella = data.fingerprint || null;
+      if (huella && antes && despues) {
+        const igual = huella.match === true;
+        set('huella', igual ? 'La huella coincide' : 'La huella NO coincide');
+        el('huella').classList.add(igual ? 'text-despues' : 'text-antes');
+        const filaAntes = antes.fingerprint && antes.fingerprint.rows;
+        const filaDespues = despues.fingerprint && despues.fingerprint.rows;
+        const sumaAntes = antes.fingerprint && antes.fingerprint.checksum;
+        const sumaDespues = despues.fingerprint && despues.fingerprint.checksum;
+        set(
+          'huella-detalle',
+          `COUNT(*) ${num(filaAntes)} contra ${num(filaDespues)} · ` +
+            `SUM(ORA_HASH(...)) ${num(sumaAntes)} contra ${num(sumaDespues)}`,
+        );
+      } else {
+        set('huella', SIN_DATO);
+        el('huella').classList.add('text-faint');
+        set('huella-detalle', 'Sin huella de resultado: la comparacion no demuestra integridad.');
+      }
+
+      set('filas', huella && huella.match ? num(huella.rows) : SIN_DATO);
+      set(
+        'filas-detalle',
+        'run_query corta en 1000 filas por eso el conteo sale de la huella, no del resultado de la muestra.',
+      );
+
+      const avisos = Array.isArray(meta.caveats) ? meta.caveats : [];
+      if (avisos.length) {
+        const ul = el('avisos');
+        ul.replaceChildren(
+          ...avisos.map((a) => {
+            const li = document.createElement('li');
+            li.textContent = a;
+            return li;
+          }),
+        );
+        show('avisos', true);
+      }
+
+      set(
+        'comparativa-nota',
+        `Eje X: repetición 1 a ${meta.repetitions || 0}. Cada punto es una ejecución, no una muestra en vivo.`,
+      );
+      set(
+        'leyenda-calentamiento',
+        `Las repeticiones 1 a ${warmup} salen segmentadas: son calentamiento de cache y quedan fuera de la mediana.`,
+      );
+
+      // --- Cuellos de botella ---------------------------------------------
+      const hallazgos = Array.isArray(data.findings) ? data.findings : [];
+      if (hallazgos.length) {
+        const ul = el('cuellos');
+        ul.replaceChildren(
+          ...hallazgos.map((f) => {
+            const li = document.createElement('li');
+            li.className = 'py-5';
+            li.append(
+              etiquetaSeveridad(f.severity),
+              tituloHallazgo(f.title),
+              textoHallazgo(f.detail),
+              textoHallazgo(f.evidence, 'Evidencia: '),
+              textoHallazgo(f.fix, 'Que hacer: '),
+            );
+            return li;
+          }),
+        );
+        show('cuellos', true);
+      }
+
+      function etiquetaSeveridad(sev) {
+        const span = document.createElement('span');
+        span.className = 'mono mr-3 text-xs';
+        const tono = { alta: 'text-antes', media: 'text-aviso' }[sev] || 'text-faint';
+        span.classList.add(tono);
+        span.textContent = String(sev || 'sin severidad').toUpperCase();
+        return span;
+      }
+      function tituloHallazgo(texto) {
+        const h = document.createElement('h3');
+        h.className = 'inline text-sm';
+        h.textContent = texto || SIN_DATO;
+        return h;
+      }
+      function textoHallazgo(texto, prefijo = '') {
+        const p = document.createElement('p');
+        p.className = 'mono mt-2 text-xs text-muted';
+        p.textContent = texto ? prefijo + texto : SIN_DATO;
+        return p;
+      }
+
+      // --- Tabla de mediciones --------------------------------------------
+      const n = meta.repetitions || 0;
+      const a = (antes && antes.samples) || [];
+      const d = (despues && despues.samples) || [];
+      const cuerpo = el('tabla-medidas');
+      const fragmento = document.createDocumentFragment();
+      for (let i = 0; i < n; i++) {
+        const sa = a[i];
+        const sd = d[i];
+        const tr = document.createElement('tr');
+        tr.className = 'border-b border-line';
+        if (i < warmup) tr.classList.add('text-faint');
+        tr.append(
+          celda(i + 1, 'text-left'),
+          celda(sa ? ms(sa.ms) : SIN_DATO, 'text-right'),
+          celda(sd ? ms(sd.ms) : SIN_DATO, 'text-right'),
+          celda(sa ? num(sa.buffers) : SIN_DATO, 'text-right'),
+          celda(sd ? num(sd.buffers) : SIN_DATO, 'text-right'),
+          celda(sa ? num(sa.reads) : SIN_DATO, 'text-right'),
+          celda(sd ? num(sd.reads) : SIN_DATO, 'text-right'),
+        );
+        fragmento.append(tr);
+      }
+      cuerpo.replaceChildren(fragmento);
+
+      function celda(texto, alineacion) {
+        const td = document.createElement('td');
+        td.className = `py-1.5 pr-6 ${alineacion}`;
+        td.textContent = texto;
+        return td;
+      }
+
+      // --- Graficas --------------------------------------------------------
+      if (window.Chart) {
+        Chart.defaults.color = '#8b93a3';
+        Chart.defaults.borderColor = '#232833';
+        Chart.defaults.font.family = "-apple-system, 'SF Pro Text', sans-serif";
+        Chart.defaults.maintainAspectRatio = false;
+
+        const etiquetas = Array.from({ length: n }, (_, i) => String(i + 1));
+        const serie = (samples, campo) => samples.map((s) => (s ? s[campo] : null));
+
+        // El trazo segmentado separa el calentamiento: el eje X es tiempo y el ojo
+        // tiene que poder distinguir la curva que no cuenta de la que si.
+        const ejeX = {
+          grid: { display: false },
+        };
+
+        function grafica(id, samples, campo, formato) {
+          const ctx = document.getElementById(id);
+          if (!ctx) return;
+          return new Chart(ctx, {
+            type: 'line',
+            plugins: [
+              {
+                id: 'progressiveReveal',
+                beforeDatasetsDraw(c) {
+                  const { ctx, chartArea: area } = c;
+                  ctx.save();
+                  ctx.beginPath();
+                  ctx.rect(
+                    area.left - 6,
+                    area.top - 6,
+                    (area.right - area.left) * (c.reveal ?? 0) + 12,
+                    area.bottom - area.top + 12,
+                  );
+                  ctx.clip();
+                },
+                afterDatasetsDraw(c) {
+                  c.ctx.restore();
+                },
+              },
+            ],
+            data: {
+              labels: etiquetas,
+              datasets: [
+                dataset('antes', 'antes', serie(samples.antes, campo)),
+                dataset('despues', 'despues', serie(samples.despues, campo)),
+              ],
+            },
+            options: {
+              animation: false,
+              interaction: { mode: 'index', intersect: false },
+              plugins: {
+                // La leyenda vive una vez, en el encabezado de la seccion. Repetirla
+                // en cada grafica son tres renglones diciendo lo mismo.
+                legend: { display: false },
+                tooltip: {
+                  callbacks: {
+                    label: (c) =>
+                      `${c.dataset.label}: ${formato(c.parsed.y)}${c.parsed.y === Math.max(...c.dataset.data.filter(Number.isFinite)) ? ' · máximo observado (no umbral crítico)' : ''}`,
+                  },
+                },
+              },
+              scales: { x: ejeX, y: { beginAtZero: true } },
+            },
+          });
+        }
+
+        function dataset(clave, etiqueta, datos) {
+          return {
+            label: etiqueta,
+            data: datos,
+            borderColor: COLORES[clave],
+            backgroundColor: COLORES[clave] + '18',
+            fill: true,
+            borderWidth: 2,
+            pointRadius: (ctx) =>
+              datos[ctx.dataIndex] === Math.max(...datos.filter(Number.isFinite)) ? 6 : 2,
+            pointStyle: (ctx) =>
+              datos[ctx.dataIndex] === Math.max(...datos.filter(Number.isFinite))
+                ? 'triangle'
+                : 'circle',
+            tension: 0,
+            spanGaps: false,
+            segment: {
+              borderDash: (c) => (c.p0DataIndex < warmup ? [4, 4] : undefined),
+            },
+          };
+        }
+
+        function renderHotspots(field) {
+          const container = document.getElementById('table-hotspots');
+          const detail = document.getElementById('operation-detail');
+          const operations = Object.entries(data.operations || {}).flatMap(([version, rows]) =>
+            rows.map((row) => ({ ...row, version })),
+          );
+          const ranked = operations
+            .filter((row) => Number.isFinite(row[field]))
+            .sort((x, y) => y[field] - x[field]);
+          container.replaceChildren();
+          detail.textContent = ranked.length
+            ? 'Selecciona una operación para consultar su evidencia.'
+            : 'Sin estadísticas reales de acceso a tablas en el plan guardado.';
+          for (const [index, row] of ranked.entries()) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className =
+              'relative overflow-hidden rounded border border-line p-3 text-left text-sm';
+            const bar = document.createElement('span');
+            bar.className = 'absolute bottom-0 left-0 h-1';
+            bar.style.width =
+              (ranked[0][field] > 0 ? (row[field] / ranked[0][field]) * 100 : 0) + '%';
+            bar.style.backgroundColor =
+              row.version === 'original' ? COLORES.antes : COLORES.despues;
+            const label = document.createElement('span');
+            label.textContent =
+              (index === 0 ? 'Mayor carga medida · ' : '') +
+              row.table +
+              ' · ' +
+              (row.version === 'original' ? 'Antes' : 'Después') +
+              ' · ' +
+              (field === 'ms' ? ms(row.ms) : num(row[field]));
+            button.append(label, bar);
+            button.addEventListener('click', () => {
+              container
+                .querySelectorAll('button')
+                .forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+              detail.textContent =
+                row.table +
+                ' · operación #' +
+                row.id +
+                ' ' +
+                row.operation +
+                ' · A-Time: ' +
+                ms(row.ms) +
+                ' · Buffers: ' +
+                num(row.buffers) +
+                ' · Lecturas: ' +
+                num(row.reads) +
+                ' · Filas: ' +
+                num(row.rows) +
+                '. Fuente: ALLSTATS LAST del plan ' +
+                row.version +
+                '. ' +
+                row.evidence;
+            });
+            button.setAttribute('aria-pressed', 'false');
+            container.append(button);
+          }
+        }
+        const metric = document.getElementById('metric');
+        const replay = document.getElementById('replay');
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+        let chart;
+        let frame;
+        function reproduce() {
+          cancelAnimationFrame(frame);
+          if (chart) chart.destroy();
+          const field = metric.value;
+          chart = grafica('chart-main', { antes: a, despues: d }, field, field === 'ms' ? ms : num);
+          replay.disabled = false;
+          renderHotspots(field);
+          chart.reveal = reducedMotion.matches || n < 2 ? 1 : 0;
+          chart.draw();
+          if (chart.reveal === 1) return;
+          const start = performance.now();
+          function step(now) {
+            chart.reveal = Math.min(1, (now - start) / 3500);
+            chart.draw();
+            if (chart.reveal < 1) frame = requestAnimationFrame(step);
+          }
+          frame = requestAnimationFrame(step);
+        }
+        metric.addEventListener('change', reproduce);
+        replay.addEventListener('click', reproduce);
+        reducedMotion.addEventListener('change', reproduce);
+        reproduce();
+      }
+
+      // --- Sentencias y planes --------------------------------------------
+      const bloques = [
+        ['01-original.sql', 'SQL original', antes && antes.sql],
+        ['Plan original', 'Plan original', antes && antes.plan],
+        ['02-optimizado.sql', 'SQL optimizado', despues && despues.sql],
+        ['Plan optimizado', 'Plan optimizado', despues && despues.plan],
+      ];
+      const contenedor = el('detalles');
+      const existen = bloques.filter(([, , texto]) => texto);
+      if (existen.length) {
+        contenedor.replaceChildren(
+          ...existen.map(([nombre, tituloTxt, texto]) => {
+            const d = document.createElement('details');
+            d.className = 'border-b border-line';
+            const s = document.createElement('summary');
+            s.className = 'py-3 text-sm';
+            s.textContent = `${tituloTxt} · ${nombre}`;
+            const pre = document.createElement('pre');
+            pre.className = 'pb-4 text-xs leading-relaxed text-muted';
+            pre.textContent = texto;
+            d.append(s, pre);
+            return d;
+          }),
+        );
+      } else {
+        contenedor.replaceChildren();
+      }
+
+      const advice = document.getElementById('index-advice');
+      const recommendations = Array.isArray(data.indexRecommendations)
+        ? data.indexRecommendations
+        : [];
+      const statuses = {
+        candidate: 'Idea por probar',
+        query: 'Cambiar la forma de buscar',
+        review: 'Índice por revisar',
+        measured: 'Probado en esta medición',
+      };
+      if (!recommendations.length) {
+        advice.textContent =
+          'No se registró una revisión de índices. Eso no significa que estén bien o mal.';
+      }
+      for (const item of recommendations) {
+        if (!item || typeof item !== 'object') continue;
+        const article = document.createElement('article');
+        article.className = 'border border-line rounded p-5';
+        const title = document.createElement('h3');
+        title.className = 'text-base text-ink';
+        title.textContent = item.title || 'Recomendación de índice';
+        const status = document.createElement('p');
+        status.className = 'mt-1 text-sm text-aviso';
+        status.textContent =
+          (statuses[item.status] || 'Estado no documentado') +
+          ' · ' +
+          (item.table || 'Tabla no documentada') +
+          ' · ' +
+          (item.index || 'Sin índice concreto');
+        article.append(title, status);
+        for (const [key, label] of [
+          ['explanation', 'Qué pasa'],
+          ['suggestion', 'Qué podemos probar'],
+          ['tradeoff', 'Qué cuesta'],
+          ['validation', 'Cómo saber si ayudó'],
+        ]) {
+          const paragraph = document.createElement('p');
+          paragraph.className = 'mt-3 text-sm text-muted';
+          const heading = document.createElement('strong');
+          heading.className = 'text-ink';
+          heading.textContent = label + ': ';
+          paragraph.append(
+            heading,
+            document.createTextNode(typeof item[key] === 'string' ? item[key] : 'No documentado.'),
+          );
+          article.append(paragraph);
+        }
+        const details = document.createElement('details');
+        details.className = 'mt-4 text-sm';
+        const summary = document.createElement('summary');
+        summary.textContent = 'Ver la prueba y el SQL propuesto';
+        const evidence = document.createElement('pre');
+        evidence.className =
+          'mt-3 overflow-x-auto whitespace-pre-wrap break-words text-xs text-muted';
+        evidence.textContent =
+          'Evidencia: ' +
+          (typeof item.evidence === 'string' ? item.evidence : 'No documentada.') +
+          '\n\nSQL propuesto (no ejecutado por el reporte):\n' +
+          (typeof item.sql === 'string' ? item.sql : 'Sin SQL propuesto.');
+        details.append(summary, evidence);
+        article.append(details);
+        advice.append(article);
+      }
+      // --- Errores ---------------------------------------------------------
+      const errores = Array.isArray(data.errors) ? data.errors : [];
+      if (errores.length) {
+        el('errores').replaceChildren(
+          ...errores.map((e) => {
+            const li = document.createElement('li');
+            li.textContent = `${e.step}: ${e.message}`;
+            return li;
+          }),
+        );
+        show('errores', true);
+      }
+
+      set(
+        'provenance',
+        `lu-query ${meta.serverVersion || '?'} · ${meta.database || 'base no declarada'} · generado ${meta.generatedAt || '?'}`,
+      );
+    </script>
+  </body>
+</html>
