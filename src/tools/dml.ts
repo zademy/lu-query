@@ -42,7 +42,7 @@ export interface DmlDryRunResult {
  * con un SELECT, así que se rechazan.
  */
 async function previewDml(dataAccess: DataAccess, sql: string): Promise<DmlPreviewResult> {
-  const { kind, where } = classifyDml(sql);
+  const { kind, where, alias } = classifyDml(sql);
   if (kind !== 'UPDATE' && kind !== 'DELETE') {
     throw new SecurityError(
       `execute_dml_preview solo admite UPDATE o DELETE (recibido: ${kind}); para INSERT o MERGE usa execute_dml_rollback_first`,
@@ -56,7 +56,10 @@ async function previewDml(dataAccess: DataAccess, sql: string): Promise<DmlPrevi
     );
   }
 
-  const from = `FROM ${target.table}${where === null ? '' : ` WHERE ${where}`}`;
+  // El alias va con la tabla: si el WHERE lo menciona, el SELECT espejo lo necesita.
+  const from =
+    `FROM ${target.table}${alias === null ? '' : ` ${alias}`}` +
+    `${where === null ? '' : ` WHERE ${where}`}`;
   const countRow = await dataAccess.queryForObject(`SELECT COUNT(*) ${from}`);
   // Oracle rotula la columna como COUNT(*); el valor es lo único que importa.
   const affectedRowCount = Number(Object.values(countRow ?? {})[0] ?? 0);
