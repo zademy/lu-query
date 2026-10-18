@@ -1,7 +1,6 @@
 import type { ServerContext } from '../server.js';
 import { ConfigError } from '../errors.js';
 
-
 /** `SYS_CONTEXT`, el equivalente de `SchemaCatalog.currentSchema()` del Java. */
 const SESSION_SCHEMA_SQL =
   "SELECT SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') AS current_schema FROM DUAL";
@@ -31,9 +30,7 @@ export async function resolveSchemaFor(
     }
   }
 
-  // Último recurso: el configurado (ORACLE_DB_SCHEMA), si no el de la sesión.
-  const schema = ctx.config.schema ?? ctx.sessionSchema;
-  const resolved = explicit ?? schema?.trim();
+  const resolved = explicit || ctx.config.schema?.trim() || ctx.sessionSchema?.trim();
   if (resolved === undefined || resolved.length === 0) {
     throw new ConfigError(
       `${toolName} necesita un schema: pasa el argumento schema o define ORACLE_DB_SCHEMA`,

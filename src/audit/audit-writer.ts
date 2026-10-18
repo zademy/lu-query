@@ -122,7 +122,6 @@ export function createFileAuditWriter(options: FileAuditWriterOptions): AuditWri
   };
 }
 
-
 /**
  * Envuelve una sentencia del chokepoint DataAccess: cronometra, ejecuta y deja
  * la entrada POST-ejecución con las filas derivadas (o `-1` si falló).

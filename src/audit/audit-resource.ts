@@ -1,7 +1,6 @@
 import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ServerContext } from '../server.js';
 import { listAuditSessions, readAuditSession } from './audit-reader.js';
-import type { AuditWriter } from './audit-writer.js';
 
 /** Plantilla del recurso: una sesión de auditoría por lectura. */
 export const AUDIT_URI = 'oracle://audit/session/{id}';
@@ -16,11 +15,10 @@ const MAX_SUGGESTIONS = 20;
  * completions del `id` con los ids reales del directorio de auditoría.
  *
  * El writer lo construye `createServer`; aquí sólo se publica el recurso.
- * proceso (una sesión por proceso, como el bean `AuditLogWriter` del Java).
  */
 export function registerAuditResource(ctx: ServerContext): void {
   const { audit } = ctx.config;
-  const writer: AuditWriter = ctx.audit;
+  const writer = ctx.audit;
   // Con la auditoría apagada el recurso es inerte, como en el Java.
   const sessionIds = async (): Promise<string[]> =>
     audit.enabled ? listAuditSessions(audit.dir) : [];

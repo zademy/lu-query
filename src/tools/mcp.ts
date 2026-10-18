@@ -44,15 +44,20 @@ export function vTool(
 ): void {
   const shape = maybeRun === undefined ? undefined : (shapeOrRun as z.ZodRawShape);
   const run = (maybeRun ?? shapeOrRun) as ToolRun;
+  // Sin inputSchema el SDK llama al handler con un solo argumento (`extra`),
+  // no con los args: por eso esta rama no los inventa.
+  if (shape === undefined) {
+    const sinArgs: ToolCallback<undefined> = (extra) =>
+      withToolContext(name, {}, () => guardTool(() => run(ctx.dataAccess, {}, extra)));
+    ctx.server.registerTool(name, { description }, sinArgs);
+    return;
+  }
+
   // El SDK solo puede tipar el handler con el shape ya resuelto; el cast
   // de `raw` traduce ese shape al que declara `run`.
   const handler: ToolCallback<z.ZodRawShape> = (raw, extra) =>
     withToolContext(name, raw, () => guardTool(() => run(ctx.dataAccess, raw, extra)));
-
-  // Sin inputSchema el SDK no anade el $schema que si lleva un shape vacio:
-  // tools/list tiene que quedar igual que en el Java.
-  const config = shape === undefined ? { description } : { description, inputSchema: shape };
-  ctx.server.registerTool(name, config, handler);
+  ctx.server.registerTool(name, { description, inputSchema: shape }, handler);
 }
 
 /** Bloque de texto con el valor en JSON: la respuesta de las tools con estructura. */
