@@ -1,3 +1,4 @@
+import { stripTrailingTerminator } from './text.js';
 import { MAX_ROWS } from '../config.js';
 
 /** Página stateless que se aplica a un SELECT: offset base 0 y limit con tope. */
@@ -18,10 +19,6 @@ export function clampPage(offset: number | undefined, limit: number | undefined)
   return { offset: Math.max(from, 0), limit: clampMaxRows(limit) };
 }
 
-function strip(sql: string): string {
-  return sql.replace(/;\s*$/, '').trim();
-}
-
 const ALREADY_CAPPED = /\bfetch\s+(first|next)\b|\brow_limiting|\brownum\b/i;
 
 /**
@@ -29,7 +26,7 @@ const ALREADY_CAPPED = /\bfetch\s+(first|next)\b|\brow_limiting|\brownum\b/i;
  * más filas de las permitidas. Si el SQL ya trae su propio tope, se respeta.
  */
 export function buildCappedSelect(sql: string, maxRows?: number): string {
-  const body = strip(sql);
+  const body = stripTrailingTerminator(sql);
   if (ALREADY_CAPPED.test(body)) return body;
   return `SELECT * FROM ( ${body} ) WHERE ROWNUM <= ${clampMaxRows(maxRows)}`;
 }
@@ -41,5 +38,5 @@ export function buildCappedSelect(sql: string, maxRows?: number): string {
  */
 export function buildPagedSelect(sql: string, page: Page): string {
   if (page.offset === 0) return buildCappedSelect(sql, page.limit);
-  return `SELECT * FROM ( ${strip(sql)} ) OFFSET ${page.offset} ROWS FETCH NEXT ${page.limit} ROWS ONLY`;
+  return `SELECT * FROM ( ${stripTrailingTerminator(sql)} ) OFFSET ${page.offset} ROWS FETCH NEXT ${page.limit} ROWS ONLY`;
 }

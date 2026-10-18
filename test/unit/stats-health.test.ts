@@ -1,7 +1,7 @@
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { auditStatement } from '../../src/audit/audit-writer.js';
 import { MAX_ROWS, TIMEOUTS } from '../../src/config.js';
 import { FakeDataAccess } from '../../src/db/fake-data-access.js';

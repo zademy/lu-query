@@ -1,13 +1,12 @@
 import { z } from 'zod';
-import { withToolContext } from '../audit/context.js';
 import { readAuditSession } from '../audit/audit-reader.js';
-import type { AuditConfig } from '../config.js';
 import { MAX_ROWS, TIMEOUTS } from '../config.js';
 import { resolveSchemaFor } from '../catalog/schema.js';
 import type { DataAccess } from '../db/data-access.js';
 import type { OracleBind, OracleRow } from '../db/oracle-types.js';
-import { guardTool } from '../errors.js';
+import { assertIdentifier } from '../security/identifiers.js';
 import type { ServerContext } from '../server.js';
+import { jsonResult, vTool } from './mcp.js';
 
 /**
  * Estadísticas del optimizador, contexto de sesión y health report — la
@@ -162,7 +161,7 @@ const INVALID_OBJECTS_SQL =
   "SELECT COUNT(*) AS invalid_count FROM user_objects WHERE status = 'INVALID'";
 
 export async function healthReport(ctx: ServerContext): Promise<HealthReport> {
-  const { dataAccess, config } = ctx;
+  const { dataAccess } = ctx;
   const checks: HealthCheck[] = [];
   let databaseName: string | null = null;
   // La sonda 1 decide `down`: si no hay conexion, el resto de comprobaciones solo
@@ -285,176 +284,132 @@ const TABLE_PARAM = 'Table name.';
 
 /** Stats/Health — estadísticas del optimizador, sesión y health report (#10). */
 export function registerStatsHealth(ctx: ServerContext): void {
-  const { dataAccess } = ctx;
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'get_table_stats',
+    'Return optimizer statistics for a table: row count, blocks, avg row length, sample size, last analyzed, degree, partitioned, compression.',
     {
-      description:
-        'Return optimizer statistics for a table: row count, blocks, avg row length, sample size, last analyzed, degree, partitioned, compression.',
-      inputSchema: {
-        schema: z.string().describe(SCHEMA_PARAM).optional(),
-        table: z.string().describe(TABLE_PARAM),
-      },
+      schema: z.string().describe(SCHEMA_PARAM).optional(),
+      table: z.string().describe(TABLE_PARAM),
     },
-    async (args) =>
-      withToolContext('get_table_stats', args, () =>
-        guardTool(async () => ({
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify(
-                await getTableStats(
-                  dataAccess,
-                  await resolveSchemaFor(ctx, args.schema, 'get_table_stats'),
-                  args.table,
-                ),
-              ),
-            },
-          ],
-        })),
-      ),
+    async (dataAccess, args) => ({
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(
+            await getTableStats(
+              dataAccess,
+              await resolveSchemaFor(ctx, args.schema, 'get_table_stats'),
+              assertIdentifier(args.table, 'tabla'),
+            ),
+          ),
+        },
+      ],
+    }),
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'get_column_stats',
+    'Return optimizer statistics for columns of a table: number of distinct values (NDV), density, null count, bucket count, low/high value, histogram type. Optional column filter.',
     {
-      description:
-        'Return optimizer statistics for columns of a table: number of distinct values (NDV), density, null count, bucket count, low/high value, histogram type. Optional column filter.',
-      inputSchema: {
-        schema: z.string().describe(SCHEMA_PARAM).optional(),
-        table: z.string().describe(TABLE_PARAM),
-        column: z.string().describe('Optional column name filter.').optional(),
-      },
+      schema: z.string().describe(SCHEMA_PARAM).optional(),
+      table: z.string().describe(TABLE_PARAM),
+      column: z.string().describe('Optional column name filter.').optional(),
     },
-    async (args) =>
-      withToolContext('get_column_stats', args, () =>
-        guardTool(async () => ({
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify(
-                await getColumnStats(
-                  dataAccess,
-                  await resolveSchemaFor(ctx, args.schema, 'get_column_stats'),
-                  args.table,
-                  args.column,
-                ),
-              ),
-            },
-          ],
-        })),
-      ),
+    async (dataAccess, args) => ({
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(
+            await getColumnStats(
+              dataAccess,
+              await resolveSchemaFor(ctx, args.schema, 'get_column_stats'),
+              assertIdentifier(args.table, 'tabla'),
+              args.column === undefined ? undefined : assertIdentifier(args.column, 'column'),
+            ),
+          ),
+        },
+      ],
+    }),
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'get_histogram',
+    'Return the optimizer histogram endpoints for a column (frequency or height-balanced). Useful to understand data skew and cardinality estimates.',
     {
-      description:
-        'Return the optimizer histogram endpoints for a column (frequency or height-balanced). Useful to understand data skew and cardinality estimates.',
-      inputSchema: {
-        schema: z.string().describe(SCHEMA_PARAM).optional(),
-        table: z.string().describe(TABLE_PARAM),
-        column: z.string().describe('Column name.'),
-      },
+      schema: z.string().describe(SCHEMA_PARAM).optional(),
+      table: z.string().describe(TABLE_PARAM),
+      column: z.string().describe('Column name.'),
     },
-    async (args) =>
-      withToolContext('get_histogram', args, () =>
-        guardTool(async () => ({
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify(
-                await getHistogram(
-                  dataAccess,
-                  await resolveSchemaFor(ctx, args.schema, 'get_histogram'),
-                  args.table,
-                  args.column,
-                ),
-              ),
-            },
-          ],
-        })),
-      ),
+    async (dataAccess, args) => ({
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(
+            await getHistogram(
+              dataAccess,
+              await resolveSchemaFor(ctx, args.schema, 'get_histogram'),
+              assertIdentifier(args.table, 'tabla'),
+              assertIdentifier(args.column ?? '', 'column'),
+            ),
+          ),
+        },
+      ],
+    }),
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'get_session_privs',
-    {
-      description:
-        'List system privileges available to the current connection: directly granted system privs plus effective privs from enabled roles (deduplicated, ordered). WHEN TO CALL: only when the user explicitly asks what privileges the connection has; do NOT call as a preamble before querying tables or objects.',
-      inputSchema: {},
-    },
-    async (args) =>
-      withToolContext('get_session_privs', args, () =>
-        guardTool(async () => ({
-          content: [
-            { type: 'text' as const, text: JSON.stringify(await getSessionPrivs(dataAccess)) },
-          ],
-        })),
-      ),
+    'List system privileges available to the current connection: directly granted system privs plus effective privs from enabled roles (deduplicated, ordered). WHEN TO CALL: only when the user explicitly asks what privileges the connection has; do NOT call as a preamble before querying tables or objects.',
+    {},
+    async (dataAccess, _args) => ({
+      content: [{ type: 'text' as const, text: JSON.stringify(await getSessionPrivs(dataAccess)) }],
+    }),
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'get_session_roles',
-    {
-      description:
-        'List roles enabled for the current connection, with admin option and default-role flag. WHEN TO CALL: only when the user explicitly asks which roles the connection has; do NOT call as a preamble before querying tables or objects.',
-      inputSchema: {},
-    },
-    async (args) =>
-      withToolContext('get_session_roles', args, () =>
-        guardTool(async () => ({
-          content: [
-            { type: 'text' as const, text: JSON.stringify(await getSessionRoles(dataAccess)) },
-          ],
-        })),
-      ),
+    'List roles enabled for the current connection, with admin option and default-role flag. WHEN TO CALL: only when the user explicitly asks which roles the connection has; do NOT call as a preamble before querying tables or objects.',
+    {},
+    async (dataAccess, _args) => ({
+      content: [{ type: 'text' as const, text: JSON.stringify(await getSessionRoles(dataAccess)) }],
+    }),
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'get_plsql_errors',
+    'List compilation errors of PL/SQL units (procedures, functions, packages, triggers, types). Optional schema, name and type filter. Critical for diagnosing broken code.',
     {
-      description:
-        'List compilation errors of PL/SQL units (procedures, functions, packages, triggers, types). Optional schema, name and type filter. Critical for diagnosing broken code.',
-      inputSchema: {
-        schema: z.string().describe('Schema (owner) name. Omit to search all schemas.').optional(),
-        name: z.string().describe('Object name filter.').optional(),
-        type: z
-          .string()
-          .describe(
-            "Object type filter: 'PROCEDURE','FUNCTION','PACKAGE','PACKAGE BODY','TRIGGER','TYPE','TYPE BODY'.",
-          )
-          .optional(),
-      },
+      schema: z.string().describe('Schema (owner) name. Omit to search all schemas.').optional(),
+      name: z.string().describe('Object name filter.').optional(),
+      type: z
+        .string()
+        .describe(
+          "Object type filter: 'PROCEDURE','FUNCTION','PACKAGE','PACKAGE BODY','TRIGGER','TYPE','TYPE BODY'.",
+        )
+        .optional(),
     },
-    async (args) =>
-      withToolContext('get_plsql_errors', args, () =>
-        guardTool(async () => ({
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify(
-                await getPlsqlErrors(dataAccess, args.schema, args.name, args.type),
-              ),
-            },
-          ],
-        })),
-      ),
+    async (dataAccess, args) => ({
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(await getPlsqlErrors(dataAccess, args.schema, args.name, args.type)),
+        },
+      ],
+    }),
   );
 
-  ctx.server.registerTool(
+  vTool(
+    ctx,
     'oracle_mcp_health_report',
-    {
-      description:
-        'One-shot readiness check: connectivity, database version, catalog-role, invalid objects, and server configuration (max-rows, query-timeout, audit). Returns an aggregated health report for quick self-diagnosis. WHEN TO CALL: only when the user explicitly asks for a health/readiness check; do NOT call as a preamble before other work.',
-      inputSchema: {},
-    },
-    async (args) =>
-      withToolContext('oracle_mcp_health_report', args, () =>
-        guardTool(async () => ({
-          content: [{ type: 'text' as const, text: JSON.stringify(await healthReport(ctx)) }],
-        })),
-      ),
+    'One-shot readiness check: connectivity, database version, catalog-role, invalid objects, and server configuration (max-rows, query-timeout, audit). Returns an aggregated health report for quick self-diagnosis. WHEN TO CALL: only when the user explicitly asks for a health/readiness check; do NOT call as a preamble before other work.',
+    {},
+    async () => jsonResult(await healthReport(ctx)),
   );
 }

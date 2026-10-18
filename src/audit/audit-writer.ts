@@ -1,6 +1,5 @@
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { AuditConfig } from '../config.js';
 import { currentToolContext } from './context.js';
 import {
   AUDIT_SERVER,
