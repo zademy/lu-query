@@ -1,12 +1,40 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-theme="light">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Reporte de benchmark · lu-query</title>
+    <script>
+      // Claro por defecto; el oscuro es eleccion del usuario y se recuerda.
+      // Antes de cargar el CSS para que no haya destello del tema anterior.
+      document.documentElement.dataset.theme =
+        localStorage.getItem('lu-theme') === 'dark' ? 'dark' : 'light';
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <style type="text/tailwindcss">
       @theme static {
+        --color-bg: #f7f8fa;
+        --color-surface: #ffffff;
+        --color-line: #e3e6ec;
+        --color-ink: #16181d;
+        --color-muted: #5a6273;
+        --color-faint: #67707f;
+        --color-antes: #b3261e;
+        --color-despues: #0e7a6e;
+        --color-aviso: #8a5a00;
+        --font-sans: -apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+        --font-mono: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+      }
+    </style>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      /* El oscuro es eleccion, no punto de partida. El selector html[] pesa
+       * mas que el :root que emite @theme, asi que gana sin importar el orden
+       * en que el runtime de Tailwind inyecte su hoja. */
+      html[data-theme='dark'] {
+        color-scheme: dark;
         --color-bg: #0b0d11;
         --color-surface: #12151b;
         --color-line: #232833;
@@ -16,11 +44,7 @@
         --color-antes: #f0524b;
         --color-despues: #5ee0d0;
         --color-aviso: #f5c451;
-        --font-sans: -apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
-        --font-mono: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
       }
-    </style>
-    <style>
       /*
        * Fondo liso a proposito. Una rejilla detras de un grafico compite con la
        * reticula del grafico y vuelve ilegible la escala. Ver DESIGN.md.
@@ -65,6 +89,12 @@
       .overflow-x-scroll {
         overflow-x: auto;
       }
+      tbody[data-el='tabla-medidas'] tr:nth-child(even) td {
+        background-color: var(--color-bg);
+      }
+      h2[id] {
+        scroll-margin-top: 3.5rem;
+      }
       @media (prefers-reduced-motion: reduce) {
         * {
           animation-duration: 0.01ms !important;
@@ -77,12 +107,31 @@
 
   <body>
     <main class="mx-auto max-w-6xl px-6 py-10">
-      <header class="mb-6 border-b border-line pb-4">
-        <h1 class="text-lg" data-el="query-name"></h1>
-        <p class="mt-1 text-sm text-muted">
-          Antes y después · reproducción de mediciones registradas
-        </p>
+      <header class="mb-2 flex items-start justify-between gap-4 border-b border-line pb-4">
+        <div class="min-w-0">
+          <h1 class="text-lg" data-el="query-name"></h1>
+          <p class="mt-1 text-sm text-muted">
+            Antes y después · reproducción de mediciones registradas
+          </p>
+        </div>
+        <button
+          id="tema"
+          type="button"
+          class="shrink-0 rounded border border-line px-3 py-2 text-sm text-muted"
+          aria-pressed="false"
+        >
+          Oscuro
+        </button>
       </header>
+      <nav
+        aria-label="Secciones del reporte"
+        class="sticky top-0 z-10 -mx-6 mb-4 flex gap-4 border-b border-line bg-bg px-6 py-2 text-sm"
+      >
+        <a href="#h-comparativa" class="text-muted">Comparación</a>
+        <a href="#h-medidas" class="text-muted">Mediciones</a>
+        <a href="#h-sql" class="text-muted">SQL y planes</a>
+        <a href="#h-indices" class="text-muted">Índices</a>
+      </nav>
       <div class="grid gap-6">
         <section aria-labelledby="h-comparativa" class="min-w-0">
           <div class="flex flex-wrap items-center justify-between gap-3">
@@ -116,7 +165,8 @@
             ></canvas>
           </div>
           <div class="mt-4 flex gap-6 border-t border-line pt-3 text-sm">
-            <span style="color: #f0524b">━ Antes</span><span style="color: #5ee0d0">━ Después</span>
+            <span style="color: var(--color-antes)">━ Antes</span
+            ><span style="color: var(--color-despues)">━ Después</span>
           </div>
           <p class="mt-2 text-xs text-faint" data-el="leyenda-calentamiento"></p>
           <section class="mt-6 border-t border-line pt-4" aria-label="Tablas con mayor carga">
@@ -232,7 +282,17 @@
       const el = (name, root = document) => root.querySelector(`[data-el="${name}"]`);
 
       const SIN_DATO = 'no medido';
-      const COLORES = { antes: '#f0524b', despues: '#5ee0d0', aviso: '#f5c451' };
+      // Los colores de datos viven en el tema: al cambiarlo se releen.
+      const COLORES = { antes: '', despues: '', aviso: '' };
+      const refrescarColores = () => {
+        const estilos = getComputedStyle(document.documentElement);
+        for (const clave of ['antes', 'despues', 'aviso']) {
+          COLORES[clave] = estilos.getPropertyValue(`--color-${clave}`).trim();
+        }
+      };
+      refrescarColores();
+      // Sin Chart (sin red) el toggle solo cambia el CSS, y con eso basta.
+      let refrescarGraficas = () => {};
 
       // Todo numero del reporte viene de una medicion. Si no existe, se dice.
       const num = (v) => (v === null || v === undefined ? SIN_DATO : v.toLocaleString('es-MX'));
@@ -412,8 +472,12 @@
 
       // --- Graficas --------------------------------------------------------
       if (window.Chart) {
-        Chart.defaults.color = '#8b93a3';
-        Chart.defaults.borderColor = '#232833';
+        function aplicarTemaGrafica() {
+          const estilos = getComputedStyle(document.documentElement);
+          Chart.defaults.color = estilos.getPropertyValue('--color-muted').trim();
+          Chart.defaults.borderColor = estilos.getPropertyValue('--color-line').trim();
+        }
+        aplicarTemaGrafica();
         Chart.defaults.font.family = "-apple-system, 'SF Pro Text', sans-serif";
         Chart.defaults.maintainAspectRatio = false;
 
@@ -586,7 +650,28 @@
         replay.addEventListener('click', reproduce);
         reducedMotion.addEventListener('change', reproduce);
         reproduce();
+        refrescarGraficas = () => {
+          aplicarTemaGrafica();
+          reproduce();
+        };
       }
+
+      // --- Tema -------------------------------------------------------------
+      const botonTema = document.getElementById('tema');
+      const sincronizarBotonTema = () => {
+        const oscuro = document.documentElement.dataset.theme === 'dark';
+        botonTema.textContent = oscuro ? 'Claro' : 'Oscuro';
+        botonTema.setAttribute('aria-pressed', String(oscuro));
+      };
+      botonTema.addEventListener('click', () => {
+        const oscuro = document.documentElement.dataset.theme !== 'dark';
+        document.documentElement.dataset.theme = oscuro ? 'dark' : 'light';
+        localStorage.setItem('lu-theme', oscuro ? 'dark' : 'light');
+        sincronizarBotonTema();
+        refrescarColores();
+        refrescarGraficas();
+      });
+      sincronizarBotonTema();
 
       // --- Sentencias y planes --------------------------------------------
       const bloques = [
