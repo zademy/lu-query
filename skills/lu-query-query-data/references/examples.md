@@ -1,6 +1,6 @@
 # Verified examples - querying data
 
-Oracle 26ai Free, lu-query 2.16.2, MCP over stdio, 2026-10-18. Fixtures: `skills/README.md`. Outputs verbatim.
+Oracle 26ai Free, lu-query 2.16.3, MCP over stdio, 2026-10-18. Fixtures: `skills/README.md`. Outputs verbatim.
 
 ## Paged read
 

@@ -36,7 +36,7 @@ Every object-scoped tool resolves the owner in this order, and stops at the firs
 2. `ORACLE_DB_SCHEMA` on the server;
 3. the session's own `CURRENT_SCHEMA` (`SYS_CONTEXT('USERENV','CURRENT_SCHEMA')`) - the owner you are connected as.
 
-So with neither `ORACLE_DB_SCHEMA` nor a `schema` argument, `describe_table`, `count_rows`, `get_table_stats`, every catalog tool with `table` and every DDL tool still work: they read the session schema. (Verified 2026-10-18 on 2.16.2. Before that the session fallback was broken and they failed with "needs a schema".)
+So with neither `ORACLE_DB_SCHEMA` nor a `schema` argument, `describe_table`, `count_rows`, `get_table_stats`, every catalog tool with `table` and every DDL tool still work: they read the session schema. (Verified 2026-10-18 on 2.16.3. Before that the session fallback was broken and they failed with "needs a schema".)
 
 Pass `schema` only to target an owner other than the one you are connected as.
 

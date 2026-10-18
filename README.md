@@ -142,11 +142,11 @@ export SENTRY_ENABLED='false'              # stays off until SENTRY_DSN is set
 # Sentry, only if you report errors (values from your Sentry project)
 # export SENTRY_DSN='https://key@sentry.io/1234567'
 # export SENTRY_ENV='production'
-# export SENTRY_RELEASE='2.16.2'
+# export SENTRY_RELEASE='2.16.3'
 # export SENTRY_SEND_DEFAULT_PII='false'
 # export SENTRY_AUTH_TOKEN=''
 
-# export MCP_SERVER_VERSION='2.16.2'       # only to pin the reported version
+# export MCP_SERVER_VERSION='2.16.3'       # only to pin the reported version
 ```
 
 ```json
@@ -159,7 +159,7 @@ export SENTRY_ENABLED='false'              # stays off until SENTRY_DSN is set
   "MCP_AUDIT_ENABLED": "true",
   "MCP_AUDIT_DIR": "/var/log/lu-query",
   "LOG_LEVEL": "INFO",
-  "MCP_SERVER_VERSION": "2.16.2",
+  "MCP_SERVER_VERSION": "2.16.3",
   "SENTRY_ENABLED": "false",
   "SENTRY_DSN": "",
   "SENTRY_ENV": "",

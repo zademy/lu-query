@@ -1,6 +1,6 @@
 # Verified examples - DDL
 
-Oracle 26ai Free, lu-query 2.16.2, 2026-10-18, user `DEVUSER`. All calls returned success lines verbatim.
+Oracle 26ai Free, lu-query 2.16.3, 2026-10-18, user `DEVUSER`. All calls returned success lines verbatim.
 
 ```json
 {"tool": "create_sequence", "args": {"sequence": "SKL_SEQ", "startWith": 1000, "incrementBy": 1, "cache": 20}}
@@ -49,7 +49,7 @@ The comment is visible through `describe_table` (`COMMENTS` column) and through 
 
 ## Without a schema: the session schema is used
 
-`create_sequence` with no `schema` argument and no `ORACLE_DB_SCHEMA` on the server (re-verified 2026-10-18 on 2.16.2):
+`create_sequence` with no `schema` argument and no `ORACLE_DB_SCHEMA` on the server (re-verified 2026-10-18 on 2.16.3):
 
 ```json
 { "tool": "create_sequence", "args": { "sequence": "SKL_SEQ2" } }
@@ -59,4 +59,4 @@ The comment is visible through `describe_table` (`COMMENTS` column) and through 
 Sequence DEVUSER.SKL_SEQ2 created.
 ```
 
-The owner comes from the session's `CURRENT_SCHEMA`. Pass `schema` only to create the object in another owner. (Before 2.16.2 this call failed with "create_sequence necesita un schema": the session fallback was broken.)
+The owner comes from the session's `CURRENT_SCHEMA`. Pass `schema` only to create the object in another owner. (Before 2.16.3 this call failed with "create_sequence necesita un schema": the session fallback was broken.)

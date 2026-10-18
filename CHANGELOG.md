@@ -2,6 +2,32 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.1.0/). El número de versión de `package.json` es la fuente de verdad: el workflow de release crea el tag `v<version>` al mergear a master.
 
+## [2.16.3] - 2026-10-18
+
+### Corregido
+
+- **El Schema de sesion nunca se resolvia**: `resolveSchemaFor` leia la fila de `SYS_CONTEXT` por `current_schema`, pero node-oracledb devuelve el nombre de columna en mayusculas (`CURRENT_SCHEMA`). La cache nunca se llenaba y toda tool de catalogo sin `ORACLE_DB_SCHEMA` y sin argumento `schema` fallaba con `ConfigError: ... necesita un schema`. Los fakes de los tests devolvian la clave en minusculas, asi que la suite no lo podia ver; ahora se lee igual que en `test_connection`.
+- **Los LOB rompian el JSON de la respuesta**: node-oracledb devuelve CLOB, NCLOB y BLOB como un objeto `Lob` que arrastra la referencia de la conexion, y `JSON.stringify` de la fila falla con `Converting circular structure to JSON`. Afectaba a cualquier tabla con columna CLOB o BLOB (`get_sample_data`, `run_query`) y a `list_external_tables`, cuyo `access_parameters` es un CLOB. Se resuelve en el chokepoint, con `fetchTypeHandler` por execute: el `fetchAsString` del pool es un no-op en node-oracledb v6.
+- **El tope de filas solo se aplicaba a `run_query`**: el adapter pasaba `options?.maxRows` tal cual a oracledb, cuyo default son 100 filas, mientras el server promete `MAX_ROWS` (1000). Unas 58 tools de lectura truncaban a 100 filas en silencio. Ahora todas parten de `MAX_ROWS`.
+- **El SELECT espejo del preview de DML era SQL invalido**: `execute_dml_preview` reserializaba el WHERE desde el AST de node-sql-parser con el dialecto PostgreSQL, que entrecomilla los identificadores (`"e".DEPT_ID`) y tira el alias de la tabla. Oracle lo rechazaba con ORA-00904 y ORA-00907 en cuanto la consulta llevaba alias o subconsulta. Ahora el espejo sale del SQL que escribio el usuario.
+
+### Cambios internos
+
+- **Un solo camino de registro para las 75 tools**: `vTool` centraliza `withToolContext` + `guardTool` + `registerTool`, y los formatters de resultado (`jsonResult`, `rawResult`, `catalogResult`) viven en un unico sitio. Los 61 sitios de registro pasan a ser uno.
+- **El `AuditWriter` deja de ser un singleton de modulo**: vive en `ServerContext`, se construye en `createServer` y `registerAuditResource` solo publica el recurso. `withAudit` se aplica en `createServer`, asi que todo adapter inyectado queda auditado.
+- **Un solo resolutor de schema**: `resolveSchemaFor` es el unico camino; se eliminaron `resolveSchema` y `schemaFallback`.
+- **Helpers duplicados eliminados**: `likePattern`, `ownerBinds` y `stripTrailingTerminator` viven en `src/sql/text.ts`, y `explain.ts` usa el `quoteTrustedIdentifier` compartido en vez de su copia.
+- `stats-health.ts` valida el identificador de tabla y columna como sus pares (`assertIdentifier`).
+
+### Anadido
+
+- **219 tests de integracion contra Oracle real** (19 ficheros): las 75 tools una vez cada una, el tope de filas, el schema de sesion, el SQL avanzado (joins, outer joins, window functions, CTE, hints), el zoo de objetos de Oracle (particiones, IOT, GTT, LOB, JSON, XMLTYPE, object types, packages, indices), el SQL de Oracle a fondo (CONNECT BY, PIVOT, UNPIVOT, vistas con CHECK OPTION, vistas materializadas) y el transporte stdio real en un proceso hijo.
+- `assertIdentifier` en las tres tools de tabla y columna de `stats-health.ts`.
+
+### Documentacion
+
+- Las 9 skills se alinean con el comportamiento de 2.16.x: la resolucion de schema es automatica, el tope de 1000 filas aplica a toda tool de lectura, se documentan las formas de las columnas no escalares (CLOB, BLOB, JSON, XMLTYPE) y se anaden los 9 prompts que publica el server.
+
 ## [2.16.2] - 2026-10-17
 
 ### Cambios internos
