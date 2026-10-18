@@ -374,7 +374,7 @@ Skills: `lu-query-explore-schema`, `lu-query-query-data`, `lu-query-audit-data-q
 
 ### SQL benchmark and index recommendations
 
-[lu-query-benchmark-sql](skills/lu-query-benchmark-sql/SKILL.md) asks for your .sql file and compares the original and rewritten queries. Its HTML report includes a smooth replay of recorded runs, interactive table-access metrics, and plain-language index advice: candidates to test, existing indexes to review, and predicates that can prevent an index lookup. Each recommendation includes evidence, trade-offs and a validation step. An unused index in one plan is not automatically a bad index. Proposed SQL is displayed, not executed.
+[lu-query-benchmark-sql](skills/lu-query-benchmark-sql/SKILL.md) asks for your .sql file and compares the original and rewritten queries. Its HTML report opens in a light theme with an optional remembered dark theme, and includes a smooth replay of recorded runs, interactive table-access metrics, and plain-language index advice: candidates to test, existing indexes to review, and predicates that can prevent an index lookup. Each recommendation includes evidence, trade-offs and a validation step. An unused index in one plan is not automatically a bad index. Proposed SQL is displayed, not executed.
 
 The report uses the existing MCP tools. Table timings are inclusive plan statistics, not live intra-query telemetry. Result fingerprints are a consistency check, not proof of equivalence. See the [skill catalog](skills/README.md) for installation.
 

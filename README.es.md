@@ -372,7 +372,7 @@ Skills: `lu-query-explore-schema`, `lu-query-query-data`, `lu-query-audit-data-q
 
 ### Benchmark SQL y recomendaciones de índices
 
-[lu-query-benchmark-sql](skills/lu-query-benchmark-sql/SKILL.md) pregunta dónde está tu archivo .sql y compara la consulta original con una versión mejorada. El HTML incluye una reproducción fluida de las mediciones, tablas que puedes seleccionar para ver su carga y recomendaciones de índices en palabras sencillas. Explica qué pasa, qué probar, qué cuesta y cómo comprobar si ayudó. La evidencia y el SQL propuesto se muestran, no se ejecutan.
+[lu-query-benchmark-sql](skills/lu-query-benchmark-sql/SKILL.md) pregunta dónde está tu archivo .sql y compara la consulta original con una versión mejorada. El HTML abre en tema claro con un tema oscuro opcional que el navegador recuerda, reproduce las mediciones de forma fluida, deja seleccionar tablas para ver su carga y explica los índices en palabras sencillas. Explica qué pasa, qué probar, qué cuesta y cómo comprobar si ayudó. La evidencia y el SQL propuesto se muestran, no se ejecutan.
 
 Un índice es como la lista de páginas de un libro: puede evitar leerlo entero. Si necesitas casi todas las páginas, leer seguido puede ser mejor. Por eso, un índice que no aparece en un plan no se marca automáticamente como malo. El reporte distingue ideas por probar, cambios de consulta, índices por revisar y cambios ya medidos; no crea ni borra índices.
 

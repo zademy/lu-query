@@ -165,3 +165,22 @@ it('preserva recomendaciones y escapa SQL que podría cerrar el payload HTML', a
   expect(html).not.toContain(indexRecommendations[0]!.sql);
   expect(await payload()).toMatchObject({ indexRecommendations });
 });
+
+it('el reporte arranca en claro y el oscuro es un tema declarado, no hex sueltos', async () => {
+  const template = await readFile(
+    fileURLToPath(
+      new URL('../../skills/lu-query-benchmark-sql/references/template.html', import.meta.url),
+    ),
+    'utf8',
+  );
+
+  // Claro por defecto en el propio html, y eleccion persistida antes del CSS.
+  expect(template).toContain('<html lang="es" data-theme="light">');
+  expect(template).toContain("localStorage.getItem('lu-theme')");
+  expect(template).toContain("html[data-theme='dark']");
+  expect(template).toContain('id="tema"');
+
+  // Los colores de datos se pintan desde el tema, no duplicados en hex.
+  expect(template).toContain('style="color: var(--color-antes)"');
+  expect(template).not.toContain('style="color: #f0524b"');
+});
