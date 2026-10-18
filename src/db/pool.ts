@@ -67,7 +67,8 @@ export function createPoolProvider(config: ResolvedConfig): PoolProvider {
             poolIncrement: 1,
             connectTimeout: TIMEOUTS.socketSeconds,
             poolAlias: POOL_ALIAS,
-            fetchAsString: [oracledb.CLOB],
+            // fetchAsString a nivel de pool es un no-op en node-oracledb v6; el
+            // fetch de los LOB lo hace fetchTypeHandler en cada execute.
             sessionCallback: sessionCallback(initSql),
           }),
         )
@@ -125,9 +126,30 @@ async function withStatementTimeout<T>(
   }
 }
 
+/**
+ * Materializa los LOB al vuelo: un CLOB o un BLOB llegan como localizador que
+ * arrastra la conexion, y JSON.stringify de una fila con un CLOB revienta con
+ * 'Converting circular structure to JSON'. Como string (CLOB) o Buffer (BLOB),
+ * la fila se puede serializar y el dato llega entero (probado con 12000 chars).
+ */
+function fetchTypeHandler(
+  oracledb: OracleModule,
+): (metadata: { dbType: unknown }) => { type: unknown } | undefined {
+  return (metadata) => {
+    const type = metadata.dbType;
+    if (type === oracledb.DB_TYPE_CLOB || type === oracledb.DB_TYPE_NCLOB) {
+      return { type: oracledb.DB_TYPE_VARCHAR };
+    }
+    if (type === oracledb.DB_TYPE_BLOB) {
+      return { type: oracledb.DB_TYPE_RAW };
+    }
+    return undefined;
+  };
+}
+
 async function withConnection<T>(
   provider: PoolProvider,
-  run: (connection: OracleConnection, outFormat: number) => Promise<T>,
+  run: (connection: OracleConnection, oracledb: OracleModule) => Promise<T>,
 ): Promise<T> {
   const [oracledb, pool] = await Promise.all([loadOracle(), provider.get()]);
 
@@ -142,7 +164,7 @@ async function withConnection<T>(
     // Capa 2 (socket): readTimeout 30s del Java, que en thin es el timeout de
     // ida y vuelta de la conexión.
     connection.callTimeout = TIMEOUTS.socketSeconds * 1000;
-    return await run(connection, oracledb.OUT_FORMAT_OBJECT);
+    return await run(connection, oracledb);
   } finally {
     await connection.close().catch(() => undefined);
   }
@@ -211,13 +233,17 @@ export function createOracleDataAccess(provider: PoolProvider): DataAccess {
     binds: OracleBind[] | undefined,
     options: QueryOptions | undefined,
   ): Promise<OracleResult> =>
-    withConnection(provider, (connection, outFormat) =>
+    withConnection(provider, (connection, oracledb) =>
       withStatementTimeout(connection, options?.timeoutMs ?? TIMEOUTS.statementMs, () =>
         connection
           // node-oracledb rechaza `binds` undefined cuando se pasan 3 argumentos.
           // Sin tope explícito manda MAX_ROWS: el default del driver son 100
           // filas y el server promete 1000.
-          .execute(sql, binds ?? [], { outFormat, maxRows: options?.maxRows ?? MAX_ROWS })
+          .execute(sql, binds ?? [], {
+            outFormat: oracledb.OUT_FORMAT_OBJECT,
+            maxRows: options?.maxRows ?? MAX_ROWS,
+            fetchTypeHandler: fetchTypeHandler(oracledb),
+          })
           .catch((error: unknown) => {
             throw asDataAccessError(error, 'Oracle rechazó la sentencia');
           }),
@@ -234,10 +260,14 @@ export function createOracleDataAccess(provider: PoolProvider): DataAccess {
     options: QueryOptions | undefined,
     outcome: 'commit' | 'rollback' = 'commit',
   ): Promise<OracleResult> =>
-    withConnection(provider, (connection, outFormat) =>
+    withConnection(provider, (connection, oracledb) =>
       withStatementTimeout(connection, options?.timeoutMs ?? TIMEOUTS.statementMs, async () => {
         const result = await connection
-          .execute(sql, binds ?? [], { outFormat, maxRows: options?.maxRows ?? MAX_ROWS })
+          .execute(sql, binds ?? [], {
+            outFormat: oracledb.OUT_FORMAT_OBJECT,
+            maxRows: options?.maxRows ?? MAX_ROWS,
+            fetchTypeHandler: fetchTypeHandler(oracledb),
+          })
           .catch((error: unknown) => {
             throw asDataAccessError(error, 'Oracle rechazó la sentencia');
           });
@@ -263,11 +293,12 @@ export function createOracleDataAccess(provider: PoolProvider): DataAccess {
     },
     async call(callString, binds) {
       const oracledb = await loadOracle();
-      const row = await withConnection(provider, (connection, outFormat) =>
+      const row = await withConnection(provider, (connection, driver) =>
         withStatementTimeout(connection, TIMEOUTS.statementMs, async () => {
           const result = await connection
             .execute(`BEGIN ${callString}; END;`, toDriverCallBinds(oracledb, binds ?? []), {
-              outFormat,
+              outFormat: driver.OUT_FORMAT_OBJECT,
+              fetchTypeHandler: fetchTypeHandler(driver),
             })
             .catch((error: unknown) => {
               throw asDataAccessError(error, 'Oracle rechazó la llamada');
