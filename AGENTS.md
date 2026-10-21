@@ -14,7 +14,13 @@ Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/ag
 
 ### Git flow
 
-`master` advances only through PRs from `develop` (#53-#56). Never merge `develop` into `master` locally and never push `master` directly: the PR merges are the commits that make the two branches diverge, so a local merge duplicates that work and puts them out of step. A release is: push `develop`, open the PR, let GitHub merge it.
+One path: feature branch -> PR into `develop` -> PR `develop` -> `master` (release). Branch protection rejects direct pushes to `develop` and `master` (PR required, zero approvals, admins included) — every change rides a PR, however small.
+
+Merge PRs with "Create a merge commit" — the only method enabled; squash and rebase are disabled repo-wide. A squashed release PR freezes the merge-base and the next release PR conflicts (#61 was the incident).
+
+The PR branch deletes itself after merge (auto-delete); `develop` survives it, protected from deletion because it is the release PR's head. Local copies need `git branch -D`; a remote delete or `fetch --prune` never removes them.
+
+A release: bump `package.json` by PR into `develop` first, then PR `develop` -> `master`. `release` and `publish` are idempotent — an existing `v<version>` tag or npm version ends the run as a notice, publishing nothing. CI layout lives in CONTRIBUTING.md ("Pipeline de CI").
 
 Before every commit, run the whole local gate, not just the files you touched: `npm run format:check` (prettier checks the entire repo and CI will too), `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`. A green check on a subset of files is not a green gate.
 
