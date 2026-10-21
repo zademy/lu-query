@@ -28,6 +28,19 @@ npm run test:integration
 
 Necesitan una Oracle accesible (el equipo usa el contenedor `oracle-26ai-free`; scripts de grants en `scripts/`). No ejecutes dos suites de integración en paralelo: mutan el esquema.
 
+## Pipeline de CI
+
+```text
+push a rama feature     nada corre (no hay CI por push)
+PR feature -> develop   ci (matriz 9) + ocr-review (advisory, en paralelo)
+merge en develop        nada: el arbol ya se valido en el PR
+PR develop -> master    ci (matriz 9; son los required checks de master)
+merge en master         release (tag + notas) + publish (npm), en paralelo
+```
+
+-- Los tests solo corren en PRs (`ci.yml`): sin trigger de `push`, un commit en una rama no dispara nada y el merge no repite la matriz.
+-- `release` y `publish` solo existen después del merge a `master`: se disparan con el push que produce ese merge, nunca antes. Ambos son idempotentes (tag `v<version>` o versión en npm ya existentes terminan en aviso, sin publicar).
+
 ## Review de código en los PR
 
 `.github/workflows/ocr-review.yml` corre [OpenCodeReview](https://open-codereview.ai) sobre cada PR que entra a `develop` y deja los hallazgos como comentarios de review.
@@ -37,6 +50,8 @@ Necesitan una Oracle accesible (el equipo usa el contenedor `oracle-26ai-free`; 
 -- Severidad `medium` o menor y categorías `style`/`documentation` van al resumen en vez de comentarios inline.
 -- Para relanzar el review: comentar `/open-code-review` en el PR.
 -- GLM 5.3 corre con `thinking` activado y `effort: high` (3 rondas de review): más calidad por comentario, a cambio de PRs más lentos y caros. El ajuste vive en `llm_extra_body` / `effort` del workflow.
+--- El reviewer recibe el cuerpo del PR como contexto (`background`): un PR bien descrito recibe un review mejor informado.
+--- `max_tokens_budget` topa el costo por review; al llegar al tope se publican los hallazgos parciales sin fallar el job.
 
 Las reglas de este repo están en `.opencodereview/rule.json`: paridad con `mcp-oracle-db`, seam de `DataAccess`, stdout reservado al JSON-RPC, test por bugfix.
 
