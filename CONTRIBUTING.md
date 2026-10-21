@@ -28,15 +28,31 @@ npm run test:integration
 
 Necesitan una Oracle accesible (el equipo usa el contenedor `oracle-26ai-free`; scripts de grants en `scripts/`). No ejecutes dos suites de integración en paralelo: mutan el esquema.
 
+## Pipeline de CI
+
+```text
+push a rama feature     nada corre (no hay CI por push)
+PR feature -> develop   ci (matriz 9) + ocr-review (advisory, en paralelo)
+merge en develop        ci (matriz 9: valida la integracion y los push directos)
+PR develop -> master    sin checks: su arbol es el de develop, ya validado
+merge en master         release (tag + notas) + publish (npm), en paralelo
+```
+
+-- Los tests corren en PRs hacia `develop` y tras cada merge a `develop` (`ci.yml`); el PR de release (`develop` → `master`) no corre la matriz: su árbol es el de `develop` HEAD, ya validado. Los cambios de último momento van en `develop`, nunca como commit extra en el PR de release (esos no pasarían por la matriz).
+-- `release` y `publish` solo existen después del merge a `master`: se disparan con el push que produce ese merge, nunca antes. Ambos son idempotentes (tag `v<version>` o versión en npm ya existentes terminan en aviso, sin publicar).
+
 ## Review de código en los PR
 
 `.github/workflows/ocr-review.yml` corre [OpenCodeReview](https://open-codereview.ai) sobre cada PR que entra a `develop` y deja los hallazgos como comentarios de review.
 
--- Es **advisory**: OCR no aprueba, no pide cambios y no bloquea el merge. El veredicto es de quien revisa; los required checks de `master` siguen siendo solo los de la matriz de CI.
+-- Es **advisory**: OCR no aprueba, no pide cambios y no bloquea el merge. El veredicto es de quien revisa; la validación de contenido vive en `develop` (PR y post-merge), y `master` no exige checks en su PR de release.
+-- El cuerpo del PR y el diff son input no confiable (instrucciones inyectadas): la contención es justo este diseño advisory — lo peor que puede pasar es un texto engañoso del bot; nunca aprueba, bloquea ni toca código.
 -- Revisa el rango `merge-base(develop)..head`, o sea el cambio del PR. El PR de release (`develop` → `master`) queda fuera: su diff es todo el delta acumulado y repetiría los hallazgos ya revisados PR a PR.
 -- Severidad `medium` o menor y categorías `style`/`documentation` van al resumen en vez de comentarios inline.
 -- Para relanzar el review: comentar `/open-code-review` en el PR.
 -- GLM 5.3 corre con `thinking` activado y `effort: high` (3 rondas de review): más calidad por comentario, a cambio de PRs más lentos y caros. El ajuste vive en `llm_extra_body` / `effort` del workflow.
+-- El reviewer recibe el cuerpo del PR como contexto (`background`, truncado a 20 000 caracteres): un PR bien descrito recibe un review mejor informado.
+-- `max_tokens_budget` topa el costo por review; al llegar al tope se publican los hallazgos parciales sin fallar el job.
 
 Las reglas de este repo están en `.opencodereview/rule.json`: paridad con `mcp-oracle-db`, seam de `DataAccess`, stdout reservado al JSON-RPC, test por bugfix.
 
