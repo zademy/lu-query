@@ -1,12 +1,12 @@
 name: ci
 
-# Los tests corren en PRs y tras el merge a develop: nunca en pushes a
-# ramas feature (antes cada commit corria la matriz dos veces: push + PR).
-# El push a develop valida la integracion (merge skew) y los push directos;
-# master no necesita push: solo avanza por PR y su arbol ya se valido ahi.
+# Los tests corren en PRs hacia develop y tras el merge a develop: nunca
+# en pushes a ramas feature ni en el PR de release (develop -> master),
+# cuyo arbol ES el de develop HEAD, ya validado por el push del merge.
+# master no lleva push: solo avanza por PR.
 on:
   pull_request:
-    branches: [develop, master]
+    branches: [develop]
   push:
     branches: [develop]
 
@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Ejes: SO x Node. El nombre del job alimenta los required checks de master.
+        # Ejes: SO x Node.
         os: [ubuntu-latest, macos-latest, windows-latest]
         node: [22, 24, 26]
     steps:
