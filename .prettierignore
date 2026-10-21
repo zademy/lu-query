@@ -11,3 +11,10 @@ video/
 .agents/
 docs/
 AGENTS.md
+
+# Caché y artefactos de herramientas de análisis.
+.ua/
+
+# Documentación propiedad de herramientas (groma, backlog).
+groma/
+backlog/
