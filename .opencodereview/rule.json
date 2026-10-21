@@ -1,0 +1,43 @@
+{
+  "exclude": [
+    "dist/**",
+    "node_modules/**",
+    "mcp-audit-logs/**",
+    "video/**",
+    ".agents/**",
+    ".ua/**",
+    "groma/**",
+    "backlog/**",
+    "perf-pedidos-pagados-*/**"
+  ],
+  "rules": [
+    {
+      "path": "src/**/*.ts",
+      "rule": "Paridad con mcp-oracle-db: la fuente de verdad de cada tool es su firma Java en tools/, service/, model/. Un cambio de contrato debe citar la firma Java original o marcarse explicitamente como desviacion. No inventes parametros ni cambies el contrato en silencio. Vocabulario de dominio: GLOSSARY.md. Decisiones: docs/adr/."
+    },
+    {
+      "path": "src/**/*.ts",
+      "rule": "stdout esta reservado al JSON-RPC del MCP: solo console.error, console.warn o console.info. Ningun console.log en src/."
+    },
+    {
+      "path": "src/**/*.ts",
+      "rule": "Todo acceso a Oracle pasa por el seam de DataAccess (ADR 0002): ni conexiones nuevas ni SQL fuera de la capa de acceso. Bind de parametros, nunca concatenacion de valores en la sentencia. Si el cambio toca la capa de datos, debe venir con su test en test/."
+    },
+    {
+      "path": "src/**/*.ts",
+      "rule": "TypeScript estricto: nada de any ni de casts sin justificacion, import type para tipos, sin @ts-ignore ni eslint-disable sin un comentario que explique por que. Sin dependencias nuevas."
+    },
+    {
+      "path": "test/**/*.ts",
+      "rule": "Cada fix de bug llega con su test en test/. La suite de integracion necesita una Oracle real y muta el esquema: no asumas que dos suites pueden correr en paralelo. Los tests unitarios no tocan Oracle (usan FakeDataAccess)."
+    },
+    {
+      "path": ".github/workflows/**/*.{yml,yaml}",
+      "rule": "Permisos minimos en permissions:, versiones de actions fijadas, ningun secret impreso en logs. pull_request_target solo si el workflow no ejecuta codigo del PR. Ningun workflow debe publicar en npm: la publicacion es manual."
+    },
+    {
+      "path": "package.json",
+      "rule": "Una dependencia nueva se justifica en el PR y llega con package-lock.json actualizado y el allowScripts correspondiente si trae install scripts."
+    }
+  ]
+}

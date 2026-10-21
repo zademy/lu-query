@@ -28,6 +28,20 @@ npm run test:integration
 
 Necesitan una Oracle accesible (el equipo usa el contenedor `oracle-26ai-free`; scripts de grants en `scripts/`). No ejecutes dos suites de integración en paralelo: mutan el esquema.
 
+## Review de código en los PR
+
+`.github/workflows/ocr-review.yml` corre [OpenCodeReview](https://open-codereview.ai) sobre cada PR que entra a `develop` y deja los hallazgos como comentarios de review.
+
+-- Es **advisory**: OCR no aprueba, no pide cambios y no bloquea el merge. El veredicto es de quien revisa; los required checks de `master` siguen siendo solo los de la matriz de CI.
+-- Revisa el rango `merge-base(develop)..head`, o sea el cambio del PR. El PR de release (`develop` → `master`) queda fuera: su diff es todo el delta acumulado y repetiría los hallazgos ya revisados PR a PR.
+-- Severidad `medium` o menor y categorías `style`/`documentation` van al resumen en vez de comentarios inline.
+-- Para relanzar el review: comentar `/open-code-review` en el PR.
+-- GLM 5.3 corre con `thinking` activado y `effort: high` (3 rondas de review): más calidad por comentario, a cambio de PRs más lentos y caros. El ajuste vive en `llm_extra_body` / `effort` del workflow.
+
+Las reglas de este repo están en `.opencodereview/rule.json`: paridad con `mcp-oracle-db`, seam de `DataAccess`, stdout reservado al JSON-RPC, test por bugfix.
+
+Necesita cuatro secrets (Settings → Secrets and variables → Actions), para GLM 5.3 (Z.ai): `OCR_LLM_URL` = `https://api.z.ai/api/coding/paas/v4/chat/completions` (API regular: `https://api.z.ai/api/paas/v4/chat/completions`), `OCR_LLM_AUTH_TOKEN` (API key), `OCR_LLM_MODEL` = `glm-5.3` y `OCR_LLM_USE_ANTHROPIC` = `false` (GLM habla el protocolo OpenAI-compatible, no el de Anthropic).
+
 ## Issues y commits
 
 - Issues en GitHub (`gh`); los tickets de implementación son sub-issues de la spec (#1).

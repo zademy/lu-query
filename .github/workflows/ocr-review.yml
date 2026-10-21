@@ -1,0 +1,146 @@
+# OpenCodeReview (OCR) sobre los PRs que entran a develop.
+#
+# Alcance: solo PRs con base = develop.
+#   OCR revisa el rango merge-base(base)..head. En un PR feature -> develop ese
+#   rango es exactamente el cambio del PR. En el PR develop -> master (release)
+#   el rango es todo el delta acumulado: los mismos hallazgos que ya se
+#   revisaron PR a PR, repetidos y mas caros. Ese PR se queda fuera a proposito.
+#
+# Modo:Roots advisory. OCR postea los hallazgos con event=COMMENT: no aprueba,
+#   no pide cambios y no falla el job por tener hallazgos (solo falla si el
+#   propio OCR revienta). El veredicto es de una persona y este workflow no
+#   entra en los required checks de master.
+#
+# Secrets (Settings -> Secrets and variables -> Actions), para GLM 5.3 (Z.ai):
+#   secret    OCR_LLM_URL            https://api.z.ai/api/coding/paas/v4/chat/completions
+#                                   (API regular: https://api.z.ai/api/paas/v4/chat/completions)
+#   secret    OCR_LLM_AUTH_TOKEN     API key de Z.ai
+#   secret    OCR_LLM_MODEL          glm-5.3
+#   secret    OCR_LLM_USE_ANTHROPIC  false (GLM habla el protocolo OpenAI-compatible)
+#
+# Re-review bajo demanda: comentar /open-code-review en el PR.
+
+name: ocr-review
+
+on:
+  # pull_request_target (no pull_request) para tener secrets tambien en PRs de
+  # forks. Es seguro: la action solo lee el diff, no ejecuta codigo del PR.
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
+  # Prueba manual: el workflow vive en la rama del PR antes de llegar a
+  # develop, y pull_request_target solo corre la copia de la rama BASE.
+  # Con dispatch se prueba contra un PR existente sin esperar el merge.
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Numero del PR a revisar (base = develop)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Un grupo por PR: un push nuevo cancela el review anterior. Los comentarios que
+# no son /open-code-review caen en un grupo noop que nunca colisiona.
+concurrency:
+  group: >-
+    ${{
+      (
+        github.event_name == 'pull_request_target'
+        || (
+          github.event_name == 'issue_comment'
+          && github.event.issue.pull_request
+          && github.event.comment.user.type != 'Bot'
+          && (
+            github.event.comment.author_association == 'MEMBER'
+            || github.event.comment.author_association == 'OWNER'
+            || github.event.comment.author_association == 'COLLABORATOR'
+          )
+          && (
+            startsWith(github.event.comment.body, '/open-code-review')
+            || startsWith(github.event.comment.body, '@open-code-review')
+          )
+        )
+      )
+      && format('ocr-{0}', github.event.pull_request.number || github.event.issue.number)
+      || format('noop-{0}', github.run_id)
+    }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: ocr-review
+    runs-on: ubuntu-latest
+    # effort high = 3 rondas de review y el timeout por subtarea escala a
+    # 45 min: el job necesita margen para no morir a mitad de review.
+    timeout-minutes: 60
+    # El PR de release (develop -> master) no entra: se revisa en el PR que
+    # llevo cada feature a develop.
+    if: |
+      (github.event_name == 'pull_request_target' && github.base_ref == 'develop')
+      || github.event_name == 'workflow_dispatch'
+      || (
+        github.event_name == 'issue_comment'
+        && github.event.issue.pull_request
+        && github.event.comment.user.type != 'Bot'
+        && (
+          github.event.comment.author_association == 'MEMBER'
+          || github.event.comment.author_association == 'OWNER'
+          || github.event.comment.author_association == 'COLLABORATOR'
+        )
+        && (
+          startsWith(github.event.comment.body, '/open-code-review')
+          || startsWith(github.event.comment.body, '@open-code-review')
+        )
+      )
+    steps:
+      # issue_comment no trae el payload de pull_request: se resuelve por API.
+      - name: Resolver contexto del PR
+        id: pr-context
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const number = context.payload.pull_request?.number
+              ?? context.payload.inputs?.pr_number
+              ?? context.issue.number;
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: number,
+            });
+            core.setOutput('pr_number', number);
+            core.setOutput('base_ref', pr.base.ref);
+            core.setOutput('head_sha', pr.head.sha);
+
+      - name: Review de OCR
+        if: steps.pr-context.outputs.base_ref == 'develop'
+        uses: alibaba/open-code-review@v1.13.2
+        with:
+          llm_url: ${{ secrets.OCR_LLM_URL }}
+          llm_auth_token: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
+          llm_model: ${{ secrets.OCR_LLM_MODEL }}
+          llm_use_anthropic: ${{ secrets.OCR_LLM_USE_ANTHROPIC }}
+          # GLM 5.3 razona (thinking) antes de emitir cada comentario: el
+          # default de la action lo trae desactivado por compatibilidad.
+          llm_extra_body: '{"thinking": {"type": "enabled"}}'
+          base_ref: ${{ steps.pr-context.outputs.base_ref }}
+          head_sha: ${{ steps.pr-context.outputs.head_sha }}
+          pr_number: ${{ steps.pr-context.outputs.pr_number }}
+          # Version pineada: la action exige >= 1.9.6.
+          ocr_version: '1.13.2'
+          # El repo trabaja en español (commits, docs, ADRs).
+          language: Spanish
+          # Lo que no bloquea va al resumen, no a comentarios inline: el veredicto
+          # se toma leyendo el resumen, no 40 comentarios de estilo.
+          route_severity_below: medium
+          route_categories: style,documentation
+          # Un comentario de resumen que se actualiza en sitio; en pushes nuevos
+          # solo se postean los hallazgos que todavia no estaban.
+          sticky_summary: 'true'
+          incremental: 'true'
+          # Presets validos: low (1 ronda) | medium (2) | high (3). No existe max.
+          effort: high
+          upload_artifacts: 'true'
