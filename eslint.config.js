@@ -10,6 +10,8 @@ export default tseslint.config(
       'video/**',
       // Skills de agente: documentacion y assets vendorizados, no codigo del paquete.
       '.agents/**',
+      // Cache y artefactos de herramientas de analisis, no codigo del paquete.
+      '.ua/**',
     ],
   },
   ...tseslint.configs.recommendedTypeChecked,
