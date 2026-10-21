@@ -114,6 +114,7 @@ jobs:
             core.setOutput('pr_number', number);
             core.setOutput('base_ref', pr.base.ref);
             core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('pr_body', (pr.body ?? '').slice(0, 20000));
 
       - name: Review de OCR
         if: steps.pr-context.outputs.base_ref == 'develop'
@@ -126,9 +127,11 @@ jobs:
           # GLM 5.3 razona (thinking) antes de emitir cada comentario: el
           # default de la action lo trae desactivado por compatibilidad.
           llm_extra_body: '{"thinking": {"type": "enabled"}}'
-          # Contexto del cambio: el reviewer lee el cuerpo del PR para saber
-          # que intenta hacer; en eventos sin PR (dispatch/comentario) queda vacio.
-          background: ${{ github.event.pull_request.body || '' }}
+          # Contexto del cambio (input no confiable: lo escribe el autor del PR,
+          # incluidos forks): cuerpo truncado a 20k en pr-context, disponible
+          # igual en los tres triggers y sin riesgo de romper el tope de env
+          # del runner (~128 KB por variable, E2BIG).
+          background: ${{ steps.pr-context.outputs.pr_body }}
           # Tope de costo por review (effort high + thinking): al llegar al tope
           # publica los hallazgos parciales y termina bien, no revienta el job.
           max_tokens_budget: '2000000'
