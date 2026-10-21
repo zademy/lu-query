@@ -33,12 +33,12 @@ Necesitan una Oracle accesible (el equipo usa el contenedor `oracle-26ai-free`; 
 ```text
 push a rama feature     nada corre (no hay CI por push)
 PR feature -> develop   ci (matriz 9) + ocr-review (advisory, en paralelo)
-merge en develop        nada: el arbol ya se valido en el PR
+merge en develop        ci (matriz 9: valida la integracion y los push directos)
 PR develop -> master    ci (matriz 9; son los required checks de master)
 merge en master         release (tag + notas) + publish (npm), en paralelo
 ```
 
--- Los tests solo corren en PRs (`ci.yml`): sin trigger de `push`, un commit en una rama no dispara nada y el merge no repite la matriz.
+--- Los tests corren en PRs y tras cada merge a `develop` (`ci.yml`): un push a una rama feature no dispara nada. `master` no lleva trigger de push: solo avanza por PR y su árbol ya se validó ahí.
 -- `release` y `publish` solo existen después del merge a `master`: se disparan con el push que produce ese merge, nunca antes. Ambos son idempotentes (tag `v<version>` o versión en npm ya existentes terminan en aviso, sin publicar).
 
 ## Review de código en los PR
@@ -46,6 +46,7 @@ merge en master         release (tag + notas) + publish (npm), en paralelo
 `.github/workflows/ocr-review.yml` corre [OpenCodeReview](https://open-codereview.ai) sobre cada PR que entra a `develop` y deja los hallazgos como comentarios de review.
 
 -- Es **advisory**: OCR no aprueba, no pide cambios y no bloquea el merge. El veredicto es de quien revisa; los required checks de `master` siguen siendo solo los de la matriz de CI.
+--- El cuerpo del PR y el diff son input no confiable (instrucciones inyectadas): la contención es justo este diseño advisory — lo peor que puede pasar es un texto engañoso del bot; nunca aprueba, bloquea ni toca código.
 -- Revisa el rango `merge-base(develop)..head`, o sea el cambio del PR. El PR de release (`develop` → `master`) queda fuera: su diff es todo el delta acumulado y repetiría los hallazgos ya revisados PR a PR.
 -- Severidad `medium` o menor y categorías `style`/`documentation` van al resumen en vez de comentarios inline.
 -- Para relanzar el review: comentar `/open-code-review` en el PR.

@@ -1,11 +1,14 @@
 name: ci
 
-# Los tests corren SOLO en PRs (feature -> develop, release develop -> master).
-# Sin trigger de push: antes cada commit corria la matriz dos veces (push + PR)
-# y el arbol que llega a master ya se valido en el PR de release.
+# Los tests corren en PRs y tras el merge a develop: nunca en pushes a
+# ramas feature (antes cada commit corria la matriz dos veces: push + PR).
+# El push a develop valida la integracion (merge skew) y los push directos;
+# master no necesita push: solo avanza por PR y su arbol ya se valido ahi.
 on:
   pull_request:
     branches: [develop, master]
+  push:
+    branches: [develop]
 
 permissions:
   contents: read
