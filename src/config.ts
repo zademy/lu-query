@@ -1,7 +1,7 @@
 import { ConfigError } from './errors.js';
 
 /** Versión del paquete; es también el default de MCP_SERVER_VERSION (paridad Java). */
-export const DEFAULT_SERVER_VERSION = '2.18.0';
+export const DEFAULT_SERVER_VERSION = '2.19.0';
 
 /** max-rows global del Java. */
 export const MAX_ROWS = 1000;

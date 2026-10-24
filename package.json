@@ -1,13 +1,13 @@
 {
   "name": "lu-query",
-  "version": "2.18.0",
+  "version": "2.19.0",
   "description": "MCP server for Oracle DB over stdio (1:1 port of mcp-oracle-db 2.13.0)",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/zademy/lu-query"
   },
-  "author": "Sadot Hern\u00e1ndez Moreno",
+  "author": "Sadot Hernández Moreno",
   "type": "module",
   "bin": {
     "lu-query": "dist/index.js"
@@ -17,17 +17,17 @@
     "skills"
   ],
   "engines": {
-    "node": ">=22"
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "vp pack",
     "start": "node dist/index.js",
-    "lint": "eslint .",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run --project unit",
-    "test:integration": "vitest run --project integration",
+    "lint": "vp lint .",
+    "format": "vp fmt .",
+    "format:check": "vp fmt --check .",
+    "typecheck": "vp check --no-fmt --no-lint",
+    "test": "vp test run --project unit",
+    "test:integration": "vp test run --project integration",
     "prepublishOnly": "npm run build",
     "banner": "\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless --disable-gpu --hide-scrollbars --force-device-scale-factor=2 --window-size=1600,600 --screenshot=docs/banner.png scripts/banner.html"
   },
@@ -40,15 +40,15 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.0",
-    "eslint": "^10.13.0",
-    "prettier": "^3.9.10",
-    "tsup": "^9.0.0",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.71.2",
-    "vitest": "^5.0.5"
+    "vitest": "5.0.5",
+    "vite-plus": "1.4.0"
   },
   "allowScripts": {
-    "esbuild@0.28.2": true,
     "oracledb@26.0.0": true
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
+    "vitest": "5.0.5"
   }
 }

@@ -8,4 +8,4 @@ Cuando una dependencia del Java no existe en TS, sustituimos y documentamos el h
 - `oracledb` thin no autocommitea (commit explícito en el chokepoint) y no expone `stmtTimeout` (se simula con `Promise.race` + `breakExecution`).
 - `@sentry/node` no acepta `SENTRY_AUTH_TOKEN`: se ignora en runtime.
 - EXPLAIN PLAN requiere bloques con `PRAGMA AUTONOMOUS_TRANSACTION` para no ensuciar la sesión.
-- TypeScript va pineado a 6.x porque `typescript-eslint` aún no soporta 7.
+- TypeScript va pineado a 6.x solo para tsserver/editor: el typecheck del gate corre por tsgolint (TypeScript Go) desde la migracion a Vite+ (ADR 0006).

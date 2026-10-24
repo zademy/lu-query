@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { MAX_ROWS } from '../../src/config.js';
 import { FakeDataAccess } from '../../src/db/fake-data-access.js';
 
