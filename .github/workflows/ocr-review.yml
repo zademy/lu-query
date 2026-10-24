@@ -118,7 +118,15 @@ jobs:
 
       - name: Review de OCR
         if: steps.pr-context.outputs.base_ref == 'develop'
-        uses: alibaba/open-code-review@v1.13.2
+        uses: alibaba/open-code-review@v1.13.3
+        # El wrapper bin/ocr.js del CLI lanza un self-update detached (npm i -g
+        # @...@latest) cuando el registry reporta una version mas nueva: en un runner
+        # efimero el check nunca esta en cooldown y el reemplazo en caliente puede
+        # caer en mitad de los comandos 'ocr config set' de la action (MODULE_NOT_FOUND
+        # ../scripts/platform, run 40061693643). OCR_NO_UPDATE desactiva ese mecanismo:
+        # la version la pina ocr_version, no el registry.
+        env:
+          OCR_NO_UPDATE: '1'
         with:
           llm_url: ${{ secrets.OCR_LLM_URL }}
           llm_auth_token: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
@@ -139,7 +147,7 @@ jobs:
           head_sha: ${{ steps.pr-context.outputs.head_sha }}
           pr_number: ${{ steps.pr-context.outputs.pr_number }}
           # Version pineada: la action exige >= 1.9.6.
-          ocr_version: '1.13.2'
+          ocr_version: '1.13.3'
           # El repo trabaja en español (commits, docs, ADRs).
           language: Spanish
           # Lo que no bloquea va al resumen, no a comentarios inline: el veredicto
