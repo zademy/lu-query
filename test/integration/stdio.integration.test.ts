@@ -1,12 +1,12 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { build } from 'tsup';
+import { promisify } from 'node:util';
+import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { createHarness } from '../helpers/harness.js';
 
 /**
@@ -15,14 +15,17 @@ import { createHarness } from '../helpers/harness.js';
  * lu-query) y el unico que nadie probaba: banner a stderr, stdout reservado al
  * JSON-RPC, arranque y cierre limpios, y configuracion por entorno.
  *
- * El entry point se empaqueta con tsup a node_modules/.cache para poder
- * arrancarlo como proceso hijo: node no puede ejecutar el TS tal cual (los
+ * El entry point se construye con `npm run build` (vp pack, dist/index.js,
+ * el artefacto real de produccion) para poder arrancarlo como proceso hijo:
+ * node no puede ejecutar el TS tal cual (los
  * imports usan extension .js y hay parameter properties).
  *   LU_TEST_INTEGRATION=1 \
  *   ORACLE_DB_URL='jdbc:oracle:thin:@//localhost:1521/FREEPDB1' \
  *   ORACLE_DB_USERNAME=DEVUSER ORACLE_DB_PASSWORD=DevPassword123 npm run test:integration
  */
 const optIn = process.env.LU_TEST_INTEGRATION === '1';
+
+const exec = promisify(execFile);
 
 const GOOD_ENV: NodeJS.ProcessEnv = {
   ORACLE_DB_URL: process.env.ORACLE_DB_URL ?? 'jdbc:oracle:thin:@//localhost:1521/FREEPDB1',
@@ -31,8 +34,7 @@ const GOOD_ENV: NodeJS.ProcessEnv = {
 };
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
-const OUT_DIR = join(ROOT, 'node_modules/.cache/lu-query-stdio-it');
-const ENTRY = join(OUT_DIR, 'index.mjs');
+const ENTRY = join(ROOT, 'dist/index.js');
 
 interface ToolResult {
   isError?: boolean;
@@ -59,29 +61,12 @@ describe.skipIf(!optIn)('el MCP sobre stdio real, en un proceso hijo', () => {
   let auditDir: string;
 
   beforeAll(async () => {
-    await build({
-      config: false,
-      entry: [join(ROOT, 'src/index.ts')],
-      outDir: OUT_DIR,
-      outExtension: () => ({ js: '.mjs' }),
-      format: ['esm'],
-      bundle: true,
-      platform: 'node',
-      target: 'node22',
-      dts: false,
-      clean: true,
-      splitting: false,
-      sourcemap: false,
-      minify: false,
-      shims: false,
-      external: ['oracledb', '@sentry/node'],
-    });
+    await exec('npm', ['run', 'build'], { cwd: ROOT });
     auditDir = await mkdtemp(join(tmpdir(), 'lu-query-stdio-it-'));
   }, 120_000);
 
   afterAll(async () => {
     await rm(auditDir, { recursive: true, force: true });
-    await rm(OUT_DIR, { recursive: true, force: true });
   });
 
   it('arranca por stdio y responde initialize', async () => {

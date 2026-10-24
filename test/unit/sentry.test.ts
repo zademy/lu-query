@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/node';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vite-plus/test';
 import { loadConfig } from '../../src/config.js';
 import { DataAccessError } from '../../src/errors.js';
 import { beforeSend, createSentrySink } from '../../src/observability/sentry.js';

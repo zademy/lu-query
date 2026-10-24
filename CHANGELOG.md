@@ -2,6 +2,25 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.1.0/). El número de versión de `package.json` es la fuente de verdad: el workflow de release crea el tag `v<version>` al mergear a master.
 
+## [2.19.0] - 2026-10-23
+
+### Cambiado
+
+- **El toolchain de desarrollo migra a Vite+** (`vp`, VoidZero, core Rust): `vp check` (Oxlint + Oxfmt + typecheck tsgolint) reemplaza `eslint` + `typescript-eslint` + `prettier` + `tsc --noEmit`; `vp test` reemplaza al runner `vitest` directo y `vp pack` (tsdown/Rolldown) reemplaza a `tsup`. Las configs se consolidan en `vite.config.ts` y salen las devDependencies `eslint`, `typescript-eslint`, `prettier` y `tsup` (`typescript` se conserva para el editor; `vitest` queda pineado al bundle de Vite+). Los npm scripts no cambian de nombre: los flujos locales y la CI se invocan igual.
+- **Node minimo sube a 22.18** (`^22.18.0 || ^24.11.0 || >=26.0.0`, requisito de vite-plus). Motivo del bump minor.
+- El gate es mas rapido: lint type-aware en ~0.7 s, typecheck en ~0.5 s, build del bin en ~33 ms.
+
+### Anadido
+
+- ADR 0006: decision de migracion a Vite+, alcance y reglas lint aceptadas como diferencias.
+
+### Cambios internos
+
+- El test de integracion de stdio empaqueta y ejecuta el artefacto real de produccion (`npm run build` -> `dist/index.js`) en vez de un bundle tsup ad-hoc en cache.
+- `DEFAULT_SERVER_VERSION` acompana el bump (2.19.0).
+- Comparadores de orden explicitos en dos tests de integracion (regla type-aware `require-array-sort-compare`).
+- `allowScripts` sin `esbuild`: tsdown/Rolldown no lo usan.
+
 ## [2.16.3] - 2026-10-18
 
 ### Corregido

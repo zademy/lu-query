@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { FakeDataAccess } from '../../src/db/fake-data-access.js';
 import { createHarness, type Harness } from '../helpers/harness.js';
 

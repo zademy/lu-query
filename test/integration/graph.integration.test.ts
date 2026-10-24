@@ -1,6 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { loadConfig } from '../../src/config.js';
 import type { DataAccess } from '../../src/db/data-access.js';
 import { createServer, type ServerHandle } from '../../src/server.js';
@@ -159,11 +159,11 @@ describe.skipIf(!optIn)('grafos y data helpers contra Oracle real', () => {
       expect(whole.focus).toBeNull();
       // El esquema de ejemplo tiene 3 FK: 2 de la tabla puente y 1 de EMPLOYEES.
       expect(whole.edges).toHaveLength(3);
-      expect(whole.edges.map((edge) => edge.label).sort()).toEqual([
-        'FK_EMP_DEPT',
-        'FK_EP_EMP',
-        'FK_EP_PROJ',
-      ]);
+      expect(
+        whole.edges
+          .map((edge) => edge.label)
+          .sort((a, b) => (String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0)),
+      ).toEqual(['FK_EMP_DEPT', 'FK_EP_EMP', 'FK_EP_PROJ']);
     }, 60_000);
   });
 

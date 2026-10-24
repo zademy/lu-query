@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { ConfigError } from '../../src/errors.js';
 import { assertNodeVersion, loadConfig, parseOracleConnectString } from '../../src/config.js';
 

@@ -3,7 +3,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
 import { loadConfig } from '../../src/config.js';
 import type { DataAccess } from '../../src/db/data-access.js';
 import { createServer, type ServerHandle } from '../../src/server.js';
@@ -321,7 +321,11 @@ describe.skipIf(!optIn)('features de Oracle contra el contenedor real', () => {
 
     it('list_lob_columns ve el CLOB y el BLOB', async () => {
       const lobs = await rows('list_lob_columns', { table: LOB });
-      expect(lobs.map((c) => c.COLUMN_NAME).sort()).toEqual(['B', 'C']);
+      expect(
+        lobs
+          .map((c) => c.COLUMN_NAME)
+          .sort((a, b) => (String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0)),
+      ).toEqual(['B', 'C']);
     });
 
     it('count_rows y get_sample_data sobre la tabla con datos', async () => {
