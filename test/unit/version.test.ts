@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { DEFAULT_SERVER_VERSION } from '../../src/config.js';
 
 const pkgVersion: string = createRequire(import.meta.url)('../../package.json').version;

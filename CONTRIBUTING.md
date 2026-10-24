@@ -2,6 +2,7 @@
 
 ## Requisitos
 
+- Node.js `^22.18.0 || ^24.11.0 || >=26.0.0` (requisito de vite-plus) y npm ≥ 10 (`npm ci`; en npm ≥ 11 el `allowScripts` de `package.json` aprueba el install script de `oracledb`).
 - Node.js ≥ 22 y npm ≥ 10 (`npm ci`; en npm ≥ 11 el `allowScripts` de `package.json` aprueba los install scripts de `esbuild` y `oracledb`).
 
 ## Paridad ante todo
@@ -16,6 +17,8 @@ npm run lint && npm run typecheck
 npm test                      # unit: sin Oracle, FakeDataAccess inyectado por el harness
 npm run build                 # dist/index.js con shebang
 ```
+
+El gate delega en `vp` (Vite+): lint/formato/typecheck (`vp check`), tests (`vp test`) y build (`vp pack`), con config unica en `vite.config.ts`.
 
 ### Tests de integración (Oracle real)
 

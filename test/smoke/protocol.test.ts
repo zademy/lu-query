@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { createHarness } from '../helpers/harness.js';
 
 const pkgVersion: string = createRequire(import.meta.url)('../../package.json').version;

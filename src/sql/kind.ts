@@ -1,6 +1,14 @@
 /** Tipo de sentencia que decide el camino de validación de una tool. */
 export type StatementKind =
-  'select' | 'insert' | 'update' | 'delete' | 'merge' | 'ddl' | 'plsql' | 'explain' | 'unknown';
+  | 'select'
+  | 'insert'
+  | 'update'
+  | 'delete'
+  | 'merge'
+  | 'ddl'
+  | 'plsql'
+  | 'explain'
+  | 'unknown';
 
 /**
  * Quita comentarios y punto y coma inicial/final para poder leer el verbo.

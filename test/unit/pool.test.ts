@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { loadConfig, MAX_ROWS } from '../../src/config.js';
 import { DataAccessError } from '../../src/errors.js';
 import {

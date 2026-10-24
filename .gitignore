@@ -12,3 +12,4 @@ video/out/
 perf-*/
 /.ua
 /groma
+.vitest/

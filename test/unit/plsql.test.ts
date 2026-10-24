@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import type { OracleRow } from '../../src/db/oracle-types.js';
 import type { FakeDataAccess } from '../../src/db/fake-data-access.js';
 import { DataAccessError } from '../../src/errors.js';

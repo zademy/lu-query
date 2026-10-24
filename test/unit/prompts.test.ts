@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 import { createHarness, type Harness } from '../helpers/harness.js';
 
 /** Los prompts del `OraclePrompts` del Java, con el mismo nombre. */
